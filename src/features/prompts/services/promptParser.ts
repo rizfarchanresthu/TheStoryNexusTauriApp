@@ -295,18 +295,28 @@ export class PromptParser {
             result = context.previousWords;
         }
 
-        // If we don't have enough words and have chapter context, try to get content from previous chapter
+        // If we don't have enough words and have chapter context, loop through previous chapters
         if (currentWordCount < requestedWordCount && context.currentChapter) {
             try {
                 // Get the current chapter's POV settings
                 const currentPovType = context.povType || context.currentChapter.povType;
                 const currentPovCharacter = context.povCharacter || context.currentChapter.povCharacter;
 
-                // Use our new helper method to get the previous chapter directly
                 const chapterStore = useChapterStore.getState();
-                const previousChapter = await chapterStore.getPreviousChapter(context.currentChapter.id);
+                
+                // Start from the current chapter and work backwards through previous chapters
+                let referenceChapterId = context.currentChapter.id;
+                const collectedChapterContents: string[] = [];
+                
+                // Loop through previous chapters until we have enough words or run out of chapters
+                while (currentWordCount < requestedWordCount) {
+                    const previousChapter = await chapterStore.getPreviousChapter(referenceChapterId);
 
-                if (previousChapter) {
+                    if (!previousChapter) {
+                        // No more previous chapters
+                        break;
+                    }
+
                     // Check if POV settings match
                     const prevPovType = previousChapter.povType;
                     const prevPovCharacter = previousChapter.povCharacter;
@@ -317,38 +327,46 @@ export class PromptParser {
                         // If both are the same type and have the same character
                         (currentPovType === prevPovType && currentPovCharacter === prevPovCharacter);
 
-                    if (povMatches) {
-                        // Get the plain text content of the previous chapter
-                        const previousContent = await chapterStore.getChapterPlainText(previousChapter.id);
-
-                        if (previousContent) {
-                            // Calculate how many more words we need
-                            const wordsNeeded = requestedWordCount - currentWordCount;
-
-                            // Get the last N words from the previous chapter
-                            const newlineToken = '§NEWLINE§';
-                            const textWithTokens = previousContent.replace(/\n/g, newlineToken);
-                            const prevWords = textWithTokens.split(/\s+/);
-
-                            // Take only what we need from the end of the previous chapter
-                            const wordsToTake = Math.min(wordsNeeded, prevWords.length);
-                            const selectedPrevWords = prevWords.slice(-wordsToTake);
-
-                            // Combine previous chapter content with current content
-                            if (selectedPrevWords.length > 0) {
-                                const prevContent = selectedPrevWords.join(' ').replace(new RegExp(newlineToken, 'g'), '\n');
-
-                                // Add a separator to indicate content from previous chapter
-                                result = prevContent + '\n\n[...]\n\n' + result;
-
-                                console.log(`Added ${selectedPrevWords.length} words from previous chapter to context`);
-                            }
-                        }
-                    } else {
-                        console.log('Previous chapter POV does not match current chapter POV, skipping');
+                    if (!povMatches) {
+                        // POV doesn't match, stop looking for more chapters
+                        console.log(`Previous chapter ${previousChapter.order} POV does not match current chapter POV, stopping`);
+                        break;
                     }
-                } else {
-                    console.log('No previous chapter found');
+
+                    // Get the plain text content of the previous chapter
+                    const previousContent = await chapterStore.getChapterPlainText(previousChapter.id);
+
+                    if (previousContent) {
+                        // Calculate how many more words we need
+                        const wordsNeeded = requestedWordCount - currentWordCount;
+
+                        // Get the last N words from the previous chapter
+                        const newlineToken = '§NEWLINE§';
+                        const textWithTokens = previousContent.replace(/\n/g, newlineToken);
+                        const prevWords = textWithTokens.split(/\s+/);
+
+                        // Take only what we need from the end of the previous chapter
+                        const wordsToTake = Math.min(wordsNeeded, prevWords.length);
+                        const selectedPrevWords = prevWords.slice(-wordsToTake);
+
+                        if (selectedPrevWords.length > 0) {
+                            const prevContent = selectedPrevWords.join(' ').replace(new RegExp(newlineToken, 'g'), '\n');
+                            // Prepend to the collected contents (we're going backwards)
+                            collectedChapterContents.unshift(prevContent);
+                            currentWordCount += selectedPrevWords.length;
+
+                            console.log(`Added ${selectedPrevWords.length} words from chapter ${previousChapter.order} to context`);
+                        }
+                    }
+
+                    // Move reference to this chapter to continue looking backwards
+                    referenceChapterId = previousChapter.id;
+                }
+
+                // Combine all collected chapter contents with the current result
+                if (collectedChapterContents.length > 0) {
+                    const combinedPreviousContent = collectedChapterContents.join('\n\n[...]\n\n');
+                    result = combinedPreviousContent + (result ? '\n\n[...]\n\n' + result : '');
                 }
             } catch (error) {
                 console.error('Error fetching previous chapter content:', error);
