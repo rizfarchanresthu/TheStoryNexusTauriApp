@@ -7,6 +7,8 @@ import {
   ChevronUp,
   ChevronDown,
   GripVertical,
+  GitBranch,
+  Plus,
 } from "lucide-react";
 import { useChapterStore } from "../stores/useChapterStore";
 import type { AllowedModel, Chapter, Prompt } from "../../../types/story";
@@ -44,9 +46,8 @@ import {
   Card,
   CardContent,
   CardHeader,
-  CardFooter,
 } from "../../../components/ui/card";
-import { Bounce, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import { useStoryContext } from "@/features/stories/context/StoryContext";
 import { useAIStore } from "@/features/ai/stores/useAIStore";
 import { usePromptStore } from "@/features/prompts/store/promptStore";
@@ -56,10 +57,14 @@ import { useLorebookStore } from "@/features/lorebook/stores/useLorebookStore";
 import { DownloadMenu } from "@/components/ui/DownloadMenu";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { BranchPathSelector } from "./BranchPathSelector";
 
 interface ChapterCardProps {
   chapter: Chapter;
   storyId: string;
+  isBranch?: boolean;
+  onCreateBranch?: () => void;
+  hasBranches?: boolean;
 }
 
 interface EditChapterForm {
@@ -68,7 +73,7 @@ interface EditChapterForm {
   povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
 }
 
-export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
+export function ChapterCard({ chapter, storyId, isBranch, onCreateBranch, hasBranches }: ChapterCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const expandedStateKey = `chapter-${chapter.id}-expanded`;
@@ -78,6 +83,7 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
   });
   const [summary, setSummary] = useState(chapter.summary || "");
   const deleteChapter = useChapterStore((state) => state.deleteChapter);
+  const deleteBranch = useChapterStore((state) => state.deleteBranch);
   const updateChapter = useChapterStore((state) => state.updateChapter);
   const updateChapterSummaryOptimistic = useChapterStore(
     (state) => state.updateChapterSummaryOptimistic
@@ -111,7 +117,7 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: chapter.id });
+  } = useSortable({ id: chapter.id, disabled: isBranch });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -129,7 +135,6 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
 
   useEffect(() => {
     if (isExpanded) {
-      // Add a small delay to ensure the content is rendered
       const timer = setTimeout(() => {
         adjustTextareaHeight();
       }, 0);
@@ -145,7 +150,6 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
     localStorage.setItem(expandedStateKey, JSON.stringify(isExpanded));
   }, [isExpanded, expandedStateKey]);
 
-  // Reset POV character when switching to omniscient
   useEffect(() => {
     if (povType === "Third Person Omniscient") {
       form.setValue("povCharacter", undefined);
@@ -154,18 +158,23 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
 
   const handleDelete = async () => {
     try {
-      await deleteChapter(chapter.id);
-      setShowDeleteDialog(false);
-      toast.success(`Chapter ${chapter.order}: ${chapter.title} deleted`);
+      if (isBranch) {
+        await deleteBranch(chapter.id);
+        setShowDeleteDialog(false);
+        toast.success(`Branch ${chapter.branchLabel}: ${chapter.title} deleted`);
+      } else {
+        await deleteChapter(chapter.id);
+        setShowDeleteDialog(false);
+        toast.success(`Chapter ${chapter.order}: ${chapter.title} deleted`);
+      }
     } catch (error) {
-      console.error("Failed to delete chapter:", error);
-      toast.error("Failed to delete chapter");
+      console.error("Failed to delete:", error);
+      toast.error("Failed to delete");
     }
   };
 
   const handleEdit = async (data: EditChapterForm) => {
     try {
-      // Only include povCharacter if not omniscient
       const povCharacter =
         data.povType !== "Third Person Omniscient"
           ? data.povCharacter
@@ -176,14 +185,14 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
         povCharacter,
       });
       setShowEditDialog(false);
-      toast.success("Chapter updated successfully", {
+      toast.success("Updated successfully", {
         position: "bottom-center",
         autoClose: 1000,
         closeOnClick: true,
       });
     } catch (error) {
-      console.error("Failed to update chapter:", error);
-      toast.error("Failed to update chapter");
+      console.error("Failed to update:", error);
+      toast.error("Failed to update");
     }
   };
 
@@ -247,7 +256,7 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
   const toggleExpanded = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsExpanded((prev) => !prev);
+    setIsExpanded((prev: boolean) => !prev);
   };
 
   const handleWriteClick = () => {
@@ -255,16 +264,28 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
     navigate(`/dashboard/${storyId}/chapters/${chapter.id}`);
   };
 
+  const displayTitle = isBranch
+    ? `${chapter.branchLabel}: ${chapter.title}`
+    : `${chapter.order}: ${chapter.title}`;
+
+  const deleteDescription = isBranch
+    ? `This will permanently delete Branch ${chapter.branchLabel}: ${chapter.title}. This action cannot be undone.`
+    : hasBranches
+      ? `This will permanently delete Chapter ${chapter.order}: ${chapter.title} and all its branches. This action cannot be undone.`
+      : `This will permanently delete Chapter ${chapter.order}: ${chapter.title}. This action cannot be undone.`;
+
   const cardContent = useMemo(
     () => (
       <CardContent className="p-4">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor={`summary-${chapter.id}`}>Chapter Summary</Label>
+            <Label htmlFor={`summary-${chapter.id}`}>
+              {isBranch ? "Branch Summary" : "Chapter Summary"}
+            </Label>
             <Textarea
               ref={textareaRef}
               id={`summary-${chapter.id}`}
-              placeholder="Enter a brief summary of this chapter..."
+              placeholder={`Enter a brief summary of this ${isBranch ? "branch" : "chapter"}...`}
               value={summary}
               onChange={(e) => {
                 setSummary(e.target.value);
@@ -290,6 +311,14 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
                 onGenerate={handleGenerateSummary}
               />
             </div>
+
+            {!isBranch && (
+              <BranchPathSelector
+                chapter={chapter}
+                storyId={storyId}
+              />
+            )}
+
             <div className="flex justify-end gap-2 pt-3 border-t">
               <DownloadMenu type="chapter" id={chapter.id} />
             </div>
@@ -297,27 +326,32 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
         </div>
       </CardContent>
     ),
-    [summary, chapter.id, isGenerating, isLoading, error, prompts]
+    [summary, chapter.id, chapter.activeBranchPath, isGenerating, isLoading, error, prompts, isBranch, storyId]
   );
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <Card className="w-full">
+    <div ref={isBranch ? undefined : setNodeRef} style={isBranch ? undefined : style}>
+      <Card className={`w-full ${isBranch ? "border-l-4 border-l-primary/40 bg-muted/30" : ""}`}>
         <CardHeader className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 min-w-0">
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="cursor-grab active:cursor-grabbing flex-shrink-0"
-                  {...attributes}
-                  {...listeners}
-                >
-                  <GripVertical className="h-4 w-4" />
-                </Button>
-                <h3 className="text-lg font-semibold truncate">
-                  {chapter.order}: {chapter.title}
+                {!isBranch && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="cursor-grab active:cursor-grabbing flex-shrink-0"
+                    {...attributes}
+                    {...listeners}
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </Button>
+                )}
+                {isBranch && (
+                  <GitBranch className="h-4 w-4 text-primary/60 flex-shrink-0 ml-2" />
+                )}
+                <h3 className={`font-semibold truncate ${isBranch ? "text-base" : "text-lg"}`}>
+                  {displayTitle}
                 </h3>
               </div>
               {chapter.povCharacter && (
@@ -332,6 +366,17 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
               )}
             </div>
             <div className="flex gap-1 sm:gap-2 flex-wrap justify-end ml-8 sm:ml-0">
+              {onCreateBranch && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCreateBranch}
+                  title="Create branch"
+                >
+                  <GitBranch className="h-4 w-4 mr-1" />
+                  <Plus className="h-3 w-3" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -368,8 +413,7 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete Chapter {chapter.order}:{" "}
-              {chapter.title}. This action cannot be undone.
+              {deleteDescription}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -383,9 +427,9 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
         <DialogContent>
           <form onSubmit={form.handleSubmit(handleEdit)}>
             <DialogHeader>
-              <DialogTitle>Edit Chapter</DialogTitle>
+              <DialogTitle>Edit {isBranch ? "Branch" : "Chapter"}</DialogTitle>
               <DialogDescription>
-                Make changes to your chapter details.
+                Make changes to your {isBranch ? "branch" : "chapter"} details.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -393,7 +437,7 @@ export function ChapterCard({ chapter, storyId }: ChapterCardProps) {
                 <Label htmlFor="title">Title</Label>
                 <Input
                   id="title"
-                  placeholder="Enter chapter title"
+                  placeholder={`Enter ${isBranch ? "branch" : "chapter"} title`}
                   {...form.register("title", { required: true })}
                 />
               </div>

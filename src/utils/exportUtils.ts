@@ -1,5 +1,3 @@
-import { $generateHtmlFromNodes } from '@lexical/html';
-import { LexicalEditor } from 'lexical';
 import { Story, Chapter } from '@/types/story';
 import { db } from '@/services/database';
 
@@ -72,26 +70,114 @@ export function downloadAsFile(content: string, filename: string, contentType: s
 }
 
 /**
+ * Builds the ordered list of chapters for export, recursively inserting selected branches.
+ */
+async function buildExportChapterList(
+    storyId: string,
+    branchPath?: Record<string, string[]>
+): Promise<Chapter[]> {
+    const allChapters = await db.chapters
+        .where('storyId')
+        .equals(storyId)
+        .sortBy('order');
+
+    const mainChapters = allChapters
+        .filter(ch => !ch.parentChapterId)
+        .sort((a, b) => a.order - b.order);
+
+    if (!branchPath || Object.keys(branchPath).length === 0) {
+        return mainChapters;
+    }
+
+    const insertBranchesRecursively = (parentId: string): Chapter[] => {
+        const selectedIds = branchPath![parentId];
+        if (!selectedIds || selectedIds.length === 0) return [];
+
+        const branches = allChapters
+            .filter(ch => ch.parentChapterId === parentId && selectedIds.includes(ch.id))
+            .sort((a, b) => (a.branchOrder ?? 0) - (b.branchOrder ?? 0));
+
+        const result: Chapter[] = [];
+        for (const branch of branches) {
+            result.push(branch);
+            result.push(...insertBranchesRecursively(branch.id));
+        }
+        return result;
+    };
+
+    const result: Chapter[] = [];
+    for (const chapter of mainChapters) {
+        result.push(chapter);
+        result.push(...insertBranchesRecursively(chapter.id));
+    }
+    return result;
+}
+
+export interface BranchPointNode {
+    parent: Chapter;
+    branches: Chapter[];
+}
+
+/**
+ * Returns all chapters/branches that have sub-branches, for use in the export dialog.
+ * Includes nested branching points (branches that themselves have sub-branches).
+ */
+export async function getStoryBranchPoints(storyId: string): Promise<BranchPointNode[]> {
+    const allChapters = await db.chapters
+        .where('storyId')
+        .equals(storyId)
+        .toArray();
+
+    const byParent = new Map<string, Chapter[]>();
+    for (const ch of allChapters) {
+        if (ch.parentChapterId) {
+            const existing = byParent.get(ch.parentChapterId) || [];
+            existing.push(ch);
+            byParent.set(ch.parentChapterId, existing);
+        }
+    }
+    for (const [key, branches] of byParent) {
+        byParent.set(key, branches.sort((a, b) => (a.branchOrder ?? 0) - (b.branchOrder ?? 0)));
+    }
+
+    // Collect all parents that have branches (both main chapters and branches)
+    const result: BranchPointNode[] = [];
+    for (const [parentId, branches] of byParent) {
+        const parent = allChapters.find(ch => ch.id === parentId);
+        if (parent) {
+            result.push({ parent, branches });
+        }
+    }
+
+    // Sort: main chapters by order first, then branches by their parent's order + branchOrder
+    result.sort((a, b) => {
+        if (!a.parent.parentChapterId && !b.parent.parentChapterId) {
+            return a.parent.order - b.parent.order;
+        }
+        if (!a.parent.parentChapterId) return -1;
+        if (!b.parent.parentChapterId) return 1;
+        return (a.parent.branchOrder ?? 0) - (b.parent.branchOrder ?? 0);
+    });
+
+    return result;
+}
+
+/**
  * Downloads a story as HTML or plain text
  * @param storyId The ID of the story to download
  * @param format The format to download ('html' or 'text')
+ * @param branchPath Optional map of parentChapterId -> selectedBranchIds to include in export
  */
-export async function downloadStory(storyId: string, format: 'html' | 'text') {
+export async function downloadStory(storyId: string, format: 'html' | 'text', branchPath?: Record<string, string[]>) {
     try {
-        // Get the story
         const story = await db.stories.get(storyId);
         if (!story) {
             throw new Error('Story not found');
         }
 
-        // Get all chapters for the story
-        const chapters = await db.chapters
-            .where('storyId')
-            .equals(storyId)
-            .sortBy('order');
+        const chapters = await buildExportChapterList(storyId, branchPath);
 
         if (format === 'html') {
-            // Create HTML content
             let htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -103,6 +189,7 @@ export async function downloadStory(storyId: string, format: 'html' | 'text') {
     h2 { margin-top: 40px; }
     .chapter { margin-bottom: 30px; }
     .chapter-title { font-size: 24px; margin-bottom: 10px; }
+    .branch-title { font-size: 20px; margin-bottom: 10px; color: #555; }
     .meta { color: #666; margin-bottom: 20px; }
   </style>
 </head>
@@ -113,12 +200,15 @@ export async function downloadStory(storyId: string, format: 'html' | 'text') {
     ${story.synopsis ? `<p>Synopsis: ${story.synopsis}</p>` : ''}
   </div>`;
 
-            // Add each chapter
             for (const chapter of chapters) {
-                htmlContent += `<div class="chapter">
-    <h2 class="chapter-title">Chapter ${chapter.order}: ${chapter.title}</h2>`;
+                const isBranch = !!chapter.parentChapterId;
+                const titleClass = isBranch ? 'branch-title' : 'chapter-title';
+                const titleText = isBranch
+                    ? `Branch ${chapter.branchLabel}: ${chapter.title}`
+                    : `Chapter ${chapter.order}: ${chapter.title}`;
 
-                // Convert chapter content to HTML
+                htmlContent += `<div class="chapter">
+    <h2 class="${titleClass}">${titleText}</h2>`;
                 const chapterHtml = await convertLexicalToHtml(chapter.content);
                 htmlContent += `<div class="chapter-content">${chapterHtml}</div>
   </div>`;
@@ -127,10 +217,8 @@ export async function downloadStory(storyId: string, format: 'html' | 'text') {
             htmlContent += `</body>
 </html>`;
 
-            // Download the HTML file
             downloadAsFile(htmlContent, `${story.title}.html`, 'text/html');
         } else {
-            // Create plain text content
             let textContent = `${story.title}\n`;
             textContent += `Author: ${story.author}\n`;
             if (story.synopsis) {
@@ -138,13 +226,15 @@ export async function downloadStory(storyId: string, format: 'html' | 'text') {
             }
             textContent += '\n\n';
 
-            // Add each chapter
             for (const chapter of chapters) {
-                textContent += `Chapter ${chapter.order}: ${chapter.title}\n\n`;
+                const isBranch = !!chapter.parentChapterId;
+                const titleText = isBranch
+                    ? `Branch ${chapter.branchLabel}: ${chapter.title}`
+                    : `Chapter ${chapter.order}: ${chapter.title}`;
 
-                // Get chapter plain text
+                textContent += `${titleText}\n\n`;
+
                 try {
-                    // Parse the Lexical state
                     const editorState = JSON.parse(chapter.content);
                     let plainText = '';
 
@@ -169,7 +259,6 @@ export async function downloadStory(storyId: string, format: 'html' | 'text') {
                 }
             }
 
-            // Download the text file
             downloadAsFile(textContent, `${story.title}.txt`, 'text/plain');
         }
     } catch (error) {

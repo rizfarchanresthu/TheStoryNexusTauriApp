@@ -34,6 +34,14 @@ interface ChapterState {
     setLastEditedChapterId: (storyId: string, chapterId: string) => void;
     getLastEditedChapterId: (storyId: string) => string | null;
     updateChapterOrders: (updates: Array<{ id: string, order: number }>) => Promise<void>;
+
+    // Branch actions
+    createBranch: (parentChapterId: string, data: { title: string; branchLabel?: string; povCharacter?: string; povType?: Chapter['povType'] }) => Promise<string>;
+    getBranches: (parentChapterId: string) => Promise<Chapter[]>;
+    getMainChapters: () => Chapter[];
+    deleteBranch: (branchId: string) => Promise<void>;
+    updateActiveBranchPath: (chapterId: string, parentChapterId: string, selectedBranchIds: string[]) => Promise<void>;
+    getChaptersWithBranches: (storyId: string) => Promise<Map<string, Chapter[]>>;
 }
 
 export const useChapterStore = create<ChapterState>((set, get) => ({
@@ -159,7 +167,7 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         }
     },
 
-    // Delete a chapter
+    // Delete a chapter (recursively deletes all descendant branches)
     deleteChapter: async (id: string) => {
         set({ loading: true, error: null });
         try {
@@ -167,10 +175,56 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
                 const chapterToDelete = await db.chapters.get(id);
                 if (!chapterToDelete) throw new Error('Chapter not found');
 
-                // Delete the chapter
+                // Collect all descendant IDs recursively
+                const allDescendantIds: string[] = [];
+                const collectDescendants = async (parentId: string) => {
+                    const children = await db.chapters
+                        .where('parentChapterId')
+                        .equals(parentId)
+                        .toArray();
+                    for (const child of children) {
+                        allDescendantIds.push(child.id);
+                        await collectDescendants(child.id);
+                    }
+                };
+                await collectDescendants(id);
+
+                // Delete all descendants
+                for (const descId of allDescendantIds) {
+                    await db.chapters.delete(descId);
+                }
+
+                // Clean up activeBranchPath references to deleted chapter and all descendants
+                const idsToClean = new Set([id, ...allDescendantIds]);
+                const allStoryChapters = await db.chapters
+                    .where('storyId')
+                    .equals(chapterToDelete.storyId)
+                    .toArray();
+                for (const ch of allStoryChapters) {
+                    if (ch.activeBranchPath) {
+                        let changed = false;
+                        const newPath = { ...ch.activeBranchPath };
+                        for (const key of Object.keys(newPath)) {
+                            if (idsToClean.has(key)) {
+                                delete newPath[key];
+                                changed = true;
+                            } else {
+                                const filtered = newPath[key].filter(bId => !idsToClean.has(bId));
+                                if (filtered.length !== newPath[key].length) {
+                                    changed = true;
+                                    if (filtered.length === 0) delete newPath[key];
+                                    else newPath[key] = filtered;
+                                }
+                            }
+                        }
+                        if (changed) {
+                            await db.chapters.update(ch.id, { activeBranchPath: newPath });
+                        }
+                    }
+                }
+
                 await db.chapters.delete(id);
 
-                // Clean up last edited reference if this was the last edited chapter
                 const { lastEditedChapterIds } = get();
                 if (lastEditedChapterIds[chapterToDelete.storyId] === id) {
                     const newLastEdited = { ...lastEditedChapterIds };
@@ -179,16 +233,16 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
                     set({ lastEditedChapterIds: newLastEdited });
                 }
 
-                // Update all chapters with higher order in one operation
-                await db.chapters
-                    .where('storyId')
-                    .equals(chapterToDelete.storyId)
-                    .filter(chapter => chapter.order > chapterToDelete.order)
-                    .modify(chapter => {
-                        chapter.order -= 1;
-                    });
+                if (!chapterToDelete.parentChapterId) {
+                    await db.chapters
+                        .where('storyId')
+                        .equals(chapterToDelete.storyId)
+                        .filter(chapter => !chapter.parentChapterId && chapter.order > chapterToDelete.order)
+                        .modify(chapter => {
+                            chapter.order -= 1;
+                        });
+                }
 
-                // Fetch updated chapters to reflect in state
                 const updatedChapters = await db.chapters
                     .where('storyId')
                     .equals(chapterToDelete.storyId)
@@ -213,13 +267,13 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         set({ currentChapter: chapter });
     },
 
-    // Get summaries for previous chapters
+    // Get summaries for previous chapters (main chapters only)
     getPreviousChapterSummaries: async (storyId: string, currentOrder: number) => {
         try {
             const previousChapters = await db.chapters
                 .where('storyId')
                 .equals(storyId)
-                .filter(chapter => chapter.order <= currentOrder)
+                .filter(chapter => chapter.order <= currentOrder && !chapter.parentChapterId)
                 .sortBy('order');
 
             const summaries = previousChapters
@@ -319,15 +373,15 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         }
     },
 
-    // Enhanced summary gathering function with detailed formatting
+    // Enhanced summary gathering function with detailed formatting (main chapters only)
     getChapterSummaries: async (storyId: string, currentOrder: number, includeLatest: boolean = false) => {
         try {
             const chapters = await db.chapters
                 .where('storyId')
                 .equals(storyId)
-                .filter(chapter => includeLatest
-                    ? true  // Include all chapters
-                    : chapter.order < currentOrder) // Only include previous chapters
+                .filter(chapter => !chapter.parentChapterId && (includeLatest
+                    ? true
+                    : chapter.order < currentOrder))
                 .sortBy('order');
 
             const summaries = chapters
@@ -361,12 +415,13 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
         }
     },
 
-    // Fetch all summaries for a story
+    // Fetch all summaries for a story (main chapters only)
     getAllChapterSummaries: async (storyId: string) => {
         try {
             const chapters = await db.chapters
                 .where('storyId')
                 .equals(storyId)
+                .filter(chapter => !chapter.parentChapterId)
                 .sortBy('order');
 
             const summaries = chapters
@@ -422,25 +477,28 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
 
     getPreviousChapter: async (chapterId: string): Promise<Chapter | null> => {
         try {
-            // First get the current chapter to determine its order and storyId
             const currentChapter = await db.chapters.get(chapterId);
             if (!currentChapter) {
                 console.error('Current chapter not found:', chapterId);
                 return null;
             }
 
-            // Find all chapters with lower order in the same story
+            // If this is a branch, its "previous" is its parent chapter
+            if (currentChapter.parentChapterId) {
+                return await db.chapters.get(currentChapter.parentChapterId) || null;
+            }
+
+            // For main chapters, find the previous main chapter (skip branches)
             const previousChapters = await db.chapters
                 .where('storyId')
                 .equals(currentChapter.storyId)
-                .and(chapter => chapter.order < currentChapter.order)
+                .and(chapter => chapter.order < currentChapter.order && !chapter.parentChapterId)
                 .toArray();
 
             if (previousChapters.length === 0) {
-                return null; // No previous chapters
+                return null;
             }
 
-            // Find the chapter with the highest order (the immediate previous chapter)
             return previousChapters.reduce((prev, current) =>
                 prev.order > current.order ? prev : current
             );
@@ -534,5 +592,205 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
             });
             throw error;
         }
+    },
+
+    // --- Branch actions ---
+
+    createBranch: async (parentChapterId, data) => {
+        set({ loading: true, error: null });
+        try {
+            const parentChapter = await db.chapters.get(parentChapterId);
+            if (!parentChapter) throw new Error('Parent chapter not found');
+
+            const existingBranches = await db.chapters
+                .where('parentChapterId')
+                .equals(parentChapterId)
+                .toArray();
+
+            const nextBranchOrder = existingBranches.length === 0
+                ? 1
+                : Math.max(...existingBranches.map(b => b.branchOrder ?? 0)) + 1;
+
+            const parentPrefix = parentChapter.branchLabel ?? String(parentChapter.order);
+            const branchLabel = data.branchLabel || `${parentPrefix}-${nextBranchOrder}`;
+
+            const branchId = crypto.randomUUID();
+            await db.chapters.add({
+                id: branchId,
+                storyId: parentChapter.storyId,
+                title: data.title,
+                content: '',
+                order: parentChapter.order,
+                wordCount: 0,
+                createdAt: new Date(),
+                parentChapterId,
+                branchLabel,
+                branchOrder: nextBranchOrder,
+                povCharacter: data.povCharacter ?? parentChapter.povCharacter,
+                povType: data.povType ?? parentChapter.povType,
+            });
+
+            const newBranch = await db.chapters.get(branchId);
+            if (!newBranch) throw new Error('Failed to create branch');
+
+            set(state => ({
+                chapters: [...state.chapters, newBranch],
+                loading: false
+            }));
+
+            return branchId;
+        } catch (error) {
+            set({
+                error: error instanceof Error ? error.message : 'Failed to create branch',
+                loading: false
+            });
+            throw error;
+        }
+    },
+
+    getBranches: async (parentChapterId: string) => {
+        const branches = await db.chapters
+            .where('parentChapterId')
+            .equals(parentChapterId)
+            .sortBy('branchOrder');
+        return branches;
+    },
+
+    getMainChapters: () => {
+        return get().chapters.filter(ch => !ch.parentChapterId);
+    },
+
+    deleteBranch: async (branchId: string) => {
+        set({ loading: true, error: null });
+        try {
+            const branch = await db.chapters.get(branchId);
+            if (!branch || !branch.parentChapterId) throw new Error('Branch not found');
+
+            // Collect all descendant IDs recursively
+            const allDescendantIds: string[] = [];
+            const collectDescendants = async (parentId: string) => {
+                const children = await db.chapters
+                    .where('parentChapterId')
+                    .equals(parentId)
+                    .toArray();
+                for (const child of children) {
+                    allDescendantIds.push(child.id);
+                    await collectDescendants(child.id);
+                }
+            };
+            await collectDescendants(branchId);
+
+            // Delete all descendants first
+            for (const descId of allDescendantIds) {
+                await db.chapters.delete(descId);
+            }
+
+            await db.chapters.delete(branchId);
+
+            // Re-order remaining siblings
+            const siblings = await db.chapters
+                .where('parentChapterId')
+                .equals(branch.parentChapterId)
+                .sortBy('branchOrder');
+            for (let i = 0; i < siblings.length; i++) {
+                await db.chapters.update(siblings[i].id, { branchOrder: i + 1 });
+            }
+
+            // Clean up activeBranchPath references to this branch and all descendants
+            const idsToClean = new Set([branchId, ...allDescendantIds]);
+            const storyChapters = await db.chapters
+                .where('storyId')
+                .equals(branch.storyId)
+                .toArray();
+            for (const ch of storyChapters) {
+                if (ch.activeBranchPath) {
+                    let changed = false;
+                    const newPath = { ...ch.activeBranchPath };
+                    for (const key of Object.keys(newPath)) {
+                        if (idsToClean.has(key)) {
+                            delete newPath[key];
+                            changed = true;
+                        } else {
+                            const filtered = newPath[key].filter(id => !idsToClean.has(id));
+                            if (filtered.length !== newPath[key].length) {
+                                changed = true;
+                                if (filtered.length === 0) delete newPath[key];
+                                else newPath[key] = filtered;
+                            }
+                        }
+                    }
+                    if (changed) {
+                        await db.chapters.update(ch.id, { activeBranchPath: newPath });
+                    }
+                }
+            }
+
+            const updatedChapters = await db.chapters
+                .where('storyId')
+                .equals(branch.storyId)
+                .sortBy('order');
+
+            set(state => ({
+                chapters: updatedChapters,
+                currentChapter: state.currentChapter?.id === branchId ? null : state.currentChapter,
+                loading: false
+            }));
+        } catch (error) {
+            set({
+                error: error instanceof Error ? error.message : 'Failed to delete branch',
+                loading: false
+            });
+        }
+    },
+
+    updateActiveBranchPath: async (chapterId: string, parentChapterId: string, selectedBranchIds: string[]) => {
+        try {
+            const chapter = await db.chapters.get(chapterId);
+            if (!chapter) throw new Error('Chapter not found');
+
+            const activeBranchPath = { ...(chapter.activeBranchPath || {}) };
+            if (selectedBranchIds.length === 0) {
+                delete activeBranchPath[parentChapterId];
+            } else {
+                activeBranchPath[parentChapterId] = selectedBranchIds;
+            }
+
+            await db.chapters.update(chapterId, { activeBranchPath });
+
+            set(state => ({
+                chapters: state.chapters.map(ch =>
+                    ch.id === chapterId ? { ...ch, activeBranchPath } : ch
+                ),
+                currentChapter: state.currentChapter?.id === chapterId
+                    ? { ...state.currentChapter, activeBranchPath }
+                    : state.currentChapter,
+            }));
+        } catch (error) {
+            console.error('Failed to update active branch path:', error);
+            throw error;
+        }
+    },
+
+    getChaptersWithBranches: async (storyId: string) => {
+        const allChapters = await db.chapters
+            .where('storyId')
+            .equals(storyId)
+            .toArray();
+
+        const branchMap = new Map<string, Chapter[]>();
+        for (const ch of allChapters) {
+            if (ch.parentChapterId) {
+                const existing = branchMap.get(ch.parentChapterId) || [];
+                existing.push(ch);
+                branchMap.set(ch.parentChapterId, existing);
+            }
+        }
+
+        // Sort each group by branchOrder
+        for (const [key, branches] of branchMap) {
+            branchMap.set(key, branches.sort((a, b) => (a.branchOrder ?? 0) - (b.branchOrder ?? 0)));
+        }
+
+        return branchMap;
     },
 })); 

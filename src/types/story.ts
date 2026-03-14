@@ -25,6 +25,10 @@ export interface Chapter extends BaseEntity {
   povCharacter?: string;
   povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
   notes?: ChapterNotes;
+  parentChapterId?: string;
+  branchLabel?: string;
+  branchOrder?: number;
+  activeBranchPath?: Record<string, string[]>;
 }
 
 export interface ChapterOutline {

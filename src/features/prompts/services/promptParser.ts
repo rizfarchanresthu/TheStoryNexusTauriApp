@@ -268,105 +268,122 @@ export class PromptParser {
     }
 
     private async resolvePreviousWords(context: PromptContext, count: string = '1000'): Promise<string> {
-        // Parse the count parameter - default to 1000 if not a valid number
         const requestedWordCount = parseInt(count, 10) || 1000;
 
-        // Start with current context's previous words
         let result = '';
         let currentWordCount = 0;
 
         if (context.previousWords) {
-            // Preserve newlines by replacing them with a special token
             const newlineToken = '§NEWLINE§';
             const textWithTokens = context.previousWords.replace(/\n/g, newlineToken);
-
-            // Split into words and count them
             const words = textWithTokens.split(/\s+/);
             currentWordCount = words.length;
 
-            // If we have enough words, just return the last N words
             if (currentWordCount >= requestedWordCount) {
                 const selectedWords = words.slice(-requestedWordCount);
                 result = selectedWords.join(' ').replace(new RegExp(newlineToken, 'g'), '\n');
                 return result;
             }
 
-            // Otherwise, use what we have so far
             result = context.previousWords;
         }
 
-        // If we don't have enough words and have chapter context, loop through previous chapters
         if (currentWordCount < requestedWordCount && context.currentChapter) {
             try {
-                // Get the current chapter's POV settings
                 const currentPovType = context.povType || context.currentChapter.povType;
                 const currentPovCharacter = context.povCharacter || context.currentChapter.povCharacter;
 
                 const chapterStore = useChapterStore.getState();
-                
-                // Start from the current chapter and work backwards through previous chapters
+                const activeBranchPath = context.currentChapter.activeBranchPath || {};
+
                 let referenceChapterId = context.currentChapter.id;
                 const collectedChapterContents: string[] = [];
-                
-                // Loop through previous chapters until we have enough words or run out of chapters
+
                 while (currentWordCount < requestedWordCount) {
                     const previousChapter = await chapterStore.getPreviousChapter(referenceChapterId);
 
                     if (!previousChapter) {
-                        // No more previous chapters
                         break;
                     }
 
-                    // Check if POV settings match
                     const prevPovType = previousChapter.povType;
                     const prevPovCharacter = previousChapter.povCharacter;
 
                     const povMatches =
-                        // If both are omniscient, they match
                         (currentPovType === 'Third Person Omniscient' && prevPovType === 'Third Person Omniscient') ||
-                        // If both are the same type and have the same character
                         (currentPovType === prevPovType && currentPovCharacter === prevPovCharacter);
 
                     if (!povMatches) {
-                        // POV doesn't match, stop looking for more chapters
                         console.log(`Previous chapter ${previousChapter.order} POV does not match current chapter POV, stopping`);
                         break;
                     }
 
-                    // Get the plain text content of the previous chapter
+                    // Recursively collect selected branch content in chronological order.
+                    // Uses a local array with push (forward order) then unshifts the whole
+                    // block into collectedChapterContents so it sits before the current chapter.
+                    const collectBranchContent = async (parentId: string, out: string[]) => {
+                        const branchIds = activeBranchPath[parentId];
+                        if (!branchIds || branchIds.length === 0 || currentWordCount >= requestedWordCount) return;
+
+                        const branches = await chapterStore.getBranches(parentId);
+                        const selected = branches
+                            .filter(b => branchIds.includes(b.id))
+                            .sort((a, b) => (a.branchOrder ?? 0) - (b.branchOrder ?? 0));
+
+                        for (const branch of selected) {
+                            if (currentWordCount >= requestedWordCount) break;
+                            const branchContent = await chapterStore.getChapterPlainText(branch.id);
+                            if (branchContent) {
+                                const wordsNeeded = requestedWordCount - currentWordCount;
+                                const newlineToken = '§NEWLINE§';
+                                const textWithTokens = branchContent.replace(/\n/g, newlineToken);
+                                const branchWords = textWithTokens.split(/\s+/);
+                                const wordsToTake = Math.min(wordsNeeded, branchWords.length);
+                                const selectedWords = branchWords.slice(-wordsToTake);
+
+                                if (selectedWords.length > 0) {
+                                    const content = selectedWords.join(' ').replace(new RegExp(newlineToken, 'g'), '\n');
+                                    out.push(content);
+                                    currentWordCount += selectedWords.length;
+                                    console.log(`Added ${selectedWords.length} words from branch ${branch.branchLabel} to context`);
+                                }
+                            }
+                            // Recurse: sub-branches appear after their parent in the output
+                            await collectBranchContent(branch.id, out);
+                        }
+                    };
+                    const branchContents: string[] = [];
+                    await collectBranchContent(previousChapter.id, branchContents);
+                    if (branchContents.length > 0) {
+                        collectedChapterContents.unshift(...branchContents);
+                    }
+
+                    if (currentWordCount >= requestedWordCount) break;
+
                     const previousContent = await chapterStore.getChapterPlainText(previousChapter.id);
 
                     if (previousContent) {
-                        // Calculate how many more words we need
                         const wordsNeeded = requestedWordCount - currentWordCount;
-
-                        // Get the last N words from the previous chapter
                         const newlineToken = '§NEWLINE§';
                         const textWithTokens = previousContent.replace(/\n/g, newlineToken);
                         const prevWords = textWithTokens.split(/\s+/);
-
-                        // Take only what we need from the end of the previous chapter
                         const wordsToTake = Math.min(wordsNeeded, prevWords.length);
                         const selectedPrevWords = prevWords.slice(-wordsToTake);
 
                         if (selectedPrevWords.length > 0) {
                             const prevContent = selectedPrevWords.join(' ').replace(new RegExp(newlineToken, 'g'), '\n');
-                            // Prepend to the collected contents (we're going backwards)
                             collectedChapterContents.unshift(prevContent);
                             currentWordCount += selectedPrevWords.length;
-
                             console.log(`Added ${selectedPrevWords.length} words from chapter ${previousChapter.order} to context`);
                         }
                     }
 
-                    // Move reference to this chapter to continue looking backwards
                     referenceChapterId = previousChapter.id;
                 }
 
-                // Combine all collected chapter contents with the current result
                 if (collectedChapterContents.length > 0) {
-                    const combinedPreviousContent = collectedChapterContents.join('\n\n[...]\n\n');
-                    result = combinedPreviousContent + (result ? '\n\n[...]\n\n' + result : '');
+                    const combinedPreviousContent = collectedChapterContents.join('\n\n \n\n');
+                    result = combinedPreviousContent + (result ? '\n\n \n\n' + result : '');
                 }
             } catch (error) {
                 console.error('Error fetching previous chapter content:', error);
