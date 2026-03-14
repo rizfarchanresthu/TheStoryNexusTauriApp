@@ -226,9 +226,9 @@ function SceneBeatInner({ nodeKey }: { nodeKey: NodeKey }) {
   useEffect(() => {
     const matchTags = () => {
       const matched = new Map<string, LorebookEntry>();
-      Object.entries(tagMap).forEach(([tag, entry]) => {
+      Object.entries(tagMap).forEach(([tag, entries]) => {
         if (command.toLowerCase().includes(tag.toLowerCase())) {
-          matched.set(entry.id, entry);
+          entries.forEach(entry => matched.set(entry.id, entry));
         }
       });
       set({ localMatchedEntries: matched });

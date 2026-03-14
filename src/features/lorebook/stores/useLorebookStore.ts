@@ -6,7 +6,7 @@ interface LorebookState {
     entries: LorebookEntry[];
     isLoading: boolean;
     error: string | null;
-    tagMap: Record<string, LorebookEntry>;
+    tagMap: Record<string, LorebookEntry[]>;
     buildTagMap: () => void;
     editorContent: string;
     setEditorContent: (content: string) => void;
@@ -60,7 +60,7 @@ export const useLorebookStore = create<LorebookState>((set, get) => ({
 
     buildTagMap: () => {
         const { entries } = get();
-        const newTagMap: Record<string, LorebookEntry> = {};
+        const newTagMap: Record<string, LorebookEntry[]> = {};
 
         entries.forEach(entry => {
             // Skip disabled entries when building the tag map
@@ -68,13 +68,13 @@ export const useLorebookStore = create<LorebookState>((set, get) => ({
 
             // Add the entry name as a tag (normalized to lowercase for case-insensitive matching)
             const normalizedName = entry.name.toLowerCase().trim();
-            newTagMap[normalizedName] = entry;
+            (newTagMap[normalizedName] ??= []).push(entry);
 
             // Process the explicit tags
             entry.tags.forEach(tag => {
                 // Add the full tag
                 const normalizedTag = tag.toLowerCase().trim();
-                newTagMap[normalizedTag] = entry;
+                (newTagMap[normalizedTag] ??= []).push(entry);
 
                 // If this tag is a single word, we're done
                 if (!normalizedTag.includes(' ')) {
@@ -86,7 +86,7 @@ export const useLorebookStore = create<LorebookState>((set, get) => ({
                 words.forEach(word => {
                     // Only add individual words if they exist as standalone tags
                     if (entry.tags.some(t => t.toLowerCase() === word)) {
-                        newTagMap[word] = entry;
+                        (newTagMap[word] ??= []).push(entry);
                     }
                 });
             });

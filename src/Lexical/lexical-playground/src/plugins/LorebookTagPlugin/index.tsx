@@ -19,10 +19,9 @@ export default function LorebookTagPlugin(): null {
                 const matchedEntries = new Map<string, LorebookEntry>();
 
                 // Check for each tag in the content
-                Object.entries(tagMap).forEach(([tag, entry]) => {
+                Object.entries(tagMap).forEach(([tag, entries]) => {
                     if (content.toLowerCase().includes(tag.toLowerCase())) {
-                        // Use entry.id as key to prevent duplicates
-                        matchedEntries.set(entry.id, entry);
+                        entries.forEach(entry => matchedEntries.set(entry.id, entry));
                     }
                 });
 
