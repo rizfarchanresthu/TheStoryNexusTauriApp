@@ -56,11 +56,15 @@ function BranchTree({
   branchesByParent,
   storyId,
   onCreateBranch,
+  isBranchExpanded,
+  onToggleBranchExpansion,
 }: {
   branches: Chapter[];
   branchesByParent: Map<string, Chapter[]>;
   storyId: string;
   onCreateBranch: (parent: Chapter) => void;
+  isBranchExpanded: (id: string) => boolean;
+  onToggleBranchExpansion: (id: string) => void;
 }) {
   return (
     <div className="ml-8 mt-1 space-y-1 border-l-2 border-muted-foreground/20 pl-4">
@@ -74,13 +78,21 @@ function BranchTree({
               isBranch
               onCreateBranch={() => onCreateBranch(branch)}
               hasBranches={subBranches.length > 0}
+              areBranchesExpanded={isBranchExpanded(branch.id)}
+              onToggleBranches={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleBranchExpansion(branch.id);
+              }}
             />
-            {subBranches.length > 0 && (
+            {subBranches.length > 0 && isBranchExpanded(branch.id) && (
               <BranchTree
                 branches={subBranches}
                 branchesByParent={branchesByParent}
                 storyId={storyId}
                 onCreateBranch={onCreateBranch}
+                isBranchExpanded={isBranchExpanded}
+                onToggleBranchExpansion={onToggleBranchExpansion}
               />
             )}
           </div>
@@ -106,6 +118,7 @@ export default function Chapters() {
   const { entries } = useLorebookStore();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [branchDialogParentId, setBranchDialogParentId] = useState<string | null>(null);
+  const [expandedBranchNodes, setExpandedBranchNodes] = useState<Record<string, boolean>>({});
   const form = useForm<CreateChapterForm>({
     defaultValues: {
       povType: "Third Person Omniscient",
@@ -149,6 +162,15 @@ export default function Chapters() {
     }
     return map;
   }, [chapters]);
+
+  const isBranchExpanded = (chapterId: string) => expandedBranchNodes[chapterId] ?? true;
+
+  const onToggleBranchExpansion = (chapterId: string) => {
+    setExpandedBranchNodes((prev) => ({
+      ...prev,
+      [chapterId]: !(prev[chapterId] ?? true),
+    }));
+  };
 
   useEffect(() => {
     if (storyId) {
@@ -417,8 +439,14 @@ export default function Chapters() {
                           });
                         }}
                         hasBranches={branches.length > 0}
+                        areBranchesExpanded={isBranchExpanded(chapter.id)}
+                        onToggleBranches={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onToggleBranchExpansion(chapter.id);
+                        }}
                       />
-                      {branches.length > 0 && (
+                      {branches.length > 0 && isBranchExpanded(chapter.id) && (
                         <BranchTree
                           branches={branches}
                           branchesByParent={branchesByParent}
@@ -432,6 +460,8 @@ export default function Chapters() {
                               povCharacter: parentChapter.povCharacter,
                             });
                           }}
+                          isBranchExpanded={isBranchExpanded}
+                          onToggleBranchExpansion={onToggleBranchExpansion}
                         />
                       )}
                     </div>

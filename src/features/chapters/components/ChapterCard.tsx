@@ -6,6 +6,7 @@ import {
   PenLine,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   GripVertical,
   GitBranch,
   Plus,
@@ -65,6 +66,8 @@ interface ChapterCardProps {
   isBranch?: boolean;
   onCreateBranch?: () => void;
   hasBranches?: boolean;
+  areBranchesExpanded?: boolean;
+  onToggleBranches?: (e: React.MouseEvent) => void;
 }
 
 interface EditChapterForm {
@@ -73,7 +76,15 @@ interface EditChapterForm {
   povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
 }
 
-export function ChapterCard({ chapter, storyId, isBranch, onCreateBranch, hasBranches }: ChapterCardProps) {
+export function ChapterCard({
+  chapter,
+  storyId,
+  isBranch,
+  onCreateBranch,
+  hasBranches,
+  areBranchesExpanded,
+  onToggleBranches,
+}: ChapterCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const expandedStateKey = `chapter-${chapter.id}-expanded`;
@@ -402,6 +413,20 @@ export function ChapterCard({ chapter, storyId, isBranch, onCreateBranch, hasBra
                   <ChevronDown className="h-4 w-4" />
                 )}
               </Button>
+              {hasBranches && onToggleBranches && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleBranches}
+                  title={areBranchesExpanded ? "Hide branches" : "Show branches"}
+                >
+                  {areBranchesExpanded ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/80" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

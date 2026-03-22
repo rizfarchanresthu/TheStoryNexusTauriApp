@@ -294,7 +294,25 @@ export class PromptParser {
                 const currentPovCharacter = context.povCharacter || context.currentChapter.povCharacter;
 
                 const chapterStore = useChapterStore.getState();
-                const activeBranchPath = context.currentChapter.activeBranchPath || {};
+                // For branch chapters (e.g. 4-1), inherit ancestors' branch path so toggles on parent apply
+                let activeBranchPath: Record<string, string[]> = {};
+                const ancestorChain: Array<{ activeBranchPath?: Record<string, string[]> }> = [context.currentChapter];
+                let walkId: string | null = context.currentChapter.id;
+                while (walkId) {
+                    const prev = await chapterStore.getPreviousChapter(walkId);
+                    if (!prev) break;
+                    ancestorChain.push(prev);
+                    walkId = prev.id;
+                }
+                for (const ch of ancestorChain) {
+                    if (ch.activeBranchPath) {
+                        for (const [parentId, branchIds] of Object.entries(ch.activeBranchPath)) {
+                            if (branchIds.length > 0 && activeBranchPath[parentId] === undefined) {
+                                activeBranchPath[parentId] = branchIds;
+                            }
+                        }
+                    }
+                }
 
                 let referenceChapterId = context.currentChapter.id;
                 const collectedChapterContents: string[] = [];
