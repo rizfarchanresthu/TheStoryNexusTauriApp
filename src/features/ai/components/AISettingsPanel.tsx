@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { aiService } from '@/services/ai/AIService';
@@ -32,6 +33,7 @@ export function AISettingsPanel() {
         openai_compatible: [],
     });
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+    const [includePreviousWordsAcrossPov, setIncludePreviousWordsAcrossPov] = useState(false);
 
     useEffect(() => {
         loadInitialData();
@@ -40,6 +42,8 @@ export function AISettingsPanel() {
     const loadInitialData = async () => {
         try {
             await aiService.initialize();
+
+            setIncludePreviousWordsAcrossPov(aiService.getIncludePreviousWordsAcrossPovChanges());
 
             const oKey = aiService.getOpenAIKey();
             const orKey = aiService.getOpenRouterKey();
@@ -149,10 +153,38 @@ export function AISettingsPanel() {
         setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
     };
 
+    const handleIncludePreviousWordsAcrossPov = async (checked: boolean) => {
+        try {
+            await aiService.updateIncludePreviousWordsAcrossPovChanges(checked);
+            setIncludePreviousWordsAcrossPov(checked);
+            toast.success(checked ? 'Previous words will include text across POV changes' : 'Previous words stop at POV boundaries');
+        } catch {
+            toast.error('Failed to update setting');
+        }
+    };
+
     const isLoading = (provider: ProviderType) => loadingProvider === provider;
 
     return (
         <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card/50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0">
+                        <Label htmlFor="prev-words-across-pov" className="text-sm font-medium">
+                            Previous words across POV changes
+                        </Label>
+                        <p className="text-xs text-muted-foreground leading-snug">
+                            When off, {'{{previous_words}}'} stops at the last chapter that shares your current POV. Turn on to keep pulling earlier prose when POV shifts.
+                        </p>
+                    </div>
+                    <Switch
+                        id="prev-words-across-pov"
+                        checked={includePreviousWordsAcrossPov}
+                        onCheckedChange={handleIncludePreviousWordsAcrossPov}
+                    />
+                </div>
+            </div>
+
             {/* Local Models */}
             <ProviderSection
                 title="Local Models"

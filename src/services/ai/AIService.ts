@@ -545,11 +545,21 @@ export class AIService {
             throw new Error('OpenRouter client not initialized');
         }
 
-        const body: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
+        type OpenRouterChatParams = OpenAI.Chat.Completions.ChatCompletionCreateParams & {
+            provider?: {
+                order?: string[];
+                allow_fallbacks?: boolean;
+            };
+        };
+
+        const body: OpenRouterChatParams = {
             model: modelId,
             messages: messages,
             temperature: temperature,
             max_tokens: maxTokens,
+            provider: {
+                order: ['novita', 'deepinfra'],
+            },
             stream: true,
         };
 
@@ -766,6 +776,18 @@ export class AIService {
 
     getLocalApiUrl(): string {
         return this.settings?.localApiUrl || this.LOCAL_API_URL;
+    }
+
+    getIncludePreviousWordsAcrossPovChanges(): boolean {
+        return this.settings?.includePreviousWordsAcrossPovChanges ?? false;
+    }
+
+    async updateIncludePreviousWordsAcrossPovChanges(value: boolean): Promise<void> {
+        if (!this.settings) {
+            throw new Error('Settings not initialized');
+        }
+        await db.aiSettings.update(this.settings.id, { includePreviousWordsAcrossPovChanges: value });
+        this.settings.includePreviousWordsAcrossPovChanges = value;
     }
 
     async updateLocalApiUrl(url: string): Promise<void> {

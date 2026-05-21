@@ -157,6 +157,8 @@ export interface AIModel {
 }
 
 export interface AISettings extends BaseEntity {
+  /** When true, {{previous_words}} may pull text from earlier chapters even if their POV differs from the current chapter. Default is false (stop at POV boundary). */
+  includePreviousWordsAcrossPovChanges?: boolean;
   openaiKey?: string;
   openrouterKey?: string;
   nanogptKey?: string;
@@ -224,6 +226,8 @@ export interface PromptParserConfig {
   povCharacter?: string;
   povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
   storyLanguage?: string;
+  /** Overrides AI setting when set. If omitted, value is taken from AI settings (default: stop at POV mismatch). */
+  includePreviousWordsAcrossPovChanges?: boolean;
   sceneBeatContext?: {
     useMatchedChapter: boolean;
     useMatchedSceneBeat: boolean;
@@ -247,6 +251,7 @@ export interface PromptContext {
   povCharacter?: string;
   povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
   storyLanguage?: string;
+  includePreviousWordsAcrossPovChanges?: boolean;
   sceneBeatContext?: {
     useMatchedChapter: boolean;
     useMatchedSceneBeat: boolean;

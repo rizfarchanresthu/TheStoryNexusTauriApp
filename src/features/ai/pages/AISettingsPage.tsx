@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { aiService } from '@/services/ai/AIService';
@@ -24,6 +25,7 @@ export default function AISettingsPage() {
     const [nanogptModels, setNanogptModels] = useState<AIModel[]>([]);
     const [openaiCompatibleModels, setOpenaiCompatibleModels] = useState<AIModel[]>([]);
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+    const [includePreviousWordsAcrossPov, setIncludePreviousWordsAcrossPov] = useState(false);
 
     useEffect(() => {
         loadInitialData();
@@ -33,6 +35,8 @@ export default function AISettingsPage() {
         try {
             console.log('[AISettingsPage] Initializing AI service');
             await aiService.initialize();
+
+            setIncludePreviousWordsAcrossPov(aiService.getIncludePreviousWordsAcrossPovChanges());
 
             // Set the keys using the new getter methods
             const openaiKey = aiService.getOpenAIKey();
@@ -235,12 +239,43 @@ export default function AISettingsPage() {
         setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
     };
 
+    const handleIncludePreviousWordsAcrossPov = async (checked: boolean) => {
+        try {
+            await aiService.updateIncludePreviousWordsAcrossPovChanges(checked);
+            setIncludePreviousWordsAcrossPov(checked);
+            toast.success(checked ? 'Previous words will include text across POV changes' : 'Previous words stop at POV boundaries');
+        } catch {
+            toast.error('Failed to update setting');
+        }
+    };
+
     return (
         <div className="p-8">
             <div className="max-w-2xl mx-auto">
                 <h1 className="text-3xl font-bold mb-8">AI Settings</h1>
 
                 <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Prompt context</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="space-y-1 min-w-0">
+                                    <Label htmlFor="prev-words-across-pov-page">Previous words across POV changes</Label>
+                                    <p className="text-sm text-muted-foreground">
+                                        When off, {'{{previous_words}}'} stops at the last chapter that shares your current POV. Turn on to keep pulling earlier prose when POV shifts.
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="prev-words-across-pov-page"
+                                    checked={includePreviousWordsAcrossPov}
+                                    onCheckedChange={handleIncludePreviousWordsAcrossPov}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* OpenAI Section */}
                     <Card>
                         <CardHeader>

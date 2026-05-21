@@ -65,10 +65,17 @@ export class PromptParser {
 
     private async buildContext(config: PromptParserConfig): Promise<PromptContext> {
 
-        const [chapters, currentChapter] = await Promise.all([
+        const [chapters, currentChapter, aiSettingsRows] = await Promise.all([
             this.database.chapters.where('storyId').equals(config.storyId).toArray(),
-            config.chapterId ? this.database.chapters.get(config.chapterId) : undefined
+            config.chapterId ? this.database.chapters.get(config.chapterId) : undefined,
+            this.database.aiSettings.toArray(),
         ]);
+
+        const fromAiSettings = aiSettingsRows[0]?.includePreviousWordsAcrossPovChanges ?? false;
+        const includePreviousWordsAcrossPovChanges =
+            config.includePreviousWordsAcrossPovChanges !== undefined
+                ? config.includePreviousWordsAcrossPovChanges
+                : fromAiSettings;
 
         return {
             ...config,
@@ -77,6 +84,7 @@ export class PromptParser {
             matchedEntries: config.matchedEntries,
             povCharacter: config.povCharacter || currentChapter?.povCharacter,
             povType: config.povType || currentChapter?.povType || 'Third Person Omniscient',
+            includePreviousWordsAcrossPovChanges,
             additionalContext: config.additionalContext || {}
         };
     }
@@ -327,13 +335,15 @@ export class PromptParser {
                     const prevPovType = previousChapter.povType;
                     const prevPovCharacter = previousChapter.povCharacter;
 
-                    const povMatches =
-                        (currentPovType === 'Third Person Omniscient' && prevPovType === 'Third Person Omniscient') ||
-                        (currentPovType === prevPovType && currentPovCharacter === prevPovCharacter);
+                    if (!context.includePreviousWordsAcrossPovChanges) {
+                        const povMatches =
+                            (currentPovType === 'Third Person Omniscient' && prevPovType === 'Third Person Omniscient') ||
+                            (currentPovType === prevPovType && currentPovCharacter === prevPovCharacter);
 
-                    if (!povMatches) {
-                        console.log(`Previous chapter ${previousChapter.order} POV does not match current chapter POV, stopping`);
-                        break;
+                        if (!povMatches) {
+                            console.log(`Previous chapter ${previousChapter.order} POV does not match current chapter POV, stopping`);
+                            break;
+                        }
                     }
 
                     // Recursively collect selected branch content in chronological order.
