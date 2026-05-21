@@ -5,7 +5,7 @@ import debounce from "lodash/debounce";
 import { $getRoot } from "lexical";
 
 import { useLorebookStore } from "@/features/lorebook/stores/useLorebookStore";
-import type { LorebookEntry } from "@/types/story";
+import { matchLorebookEntriesFromTagMap } from "@/features/lorebook/utils/matchLorebookEntries";
 
 export function LorebookHighlightPlugin(): null {
     const [editor] = useLexicalComposerContext();
@@ -21,14 +21,7 @@ export function LorebookHighlightPlugin(): null {
         const updateMatches = debounce(() => {
             editor.getEditorState().read(() => {
                 const content = $getRoot().getTextContent();
-                const normalizedContent = content.toLowerCase();
-                const matchedEntries = new Map<string, LorebookEntry>();
-
-                Object.entries(tagMap).forEach(([tag, entry]) => {
-                    if (tag.trim() && normalizedContent.includes(tag.toLowerCase())) {
-                        matchedEntries.set(entry.id, entry);
-                    }
-                });
+                const matchedEntries = matchLorebookEntriesFromTagMap(content, tagMap);
 
                 setEditorContent(content);
                 setChapterMatchedEntries(matchedEntries);

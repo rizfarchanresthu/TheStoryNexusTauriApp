@@ -13,7 +13,8 @@ import {
 import { useSceneBeatStore } from "@/features/scenebeats/stores/useSceneBeatStore";
 import { useStoryContext } from "@/features/stories/context/StoryContext";
 import { useLorebookStore } from "@/features/lorebook/stores/useLorebookStore";
-import type { LorebookEntry, SceneBeat } from "@/types/story";
+import { matchLorebookEntriesFromTagMap } from "@/features/lorebook/utils/matchLorebookEntries";
+import type { SceneBeat } from "@/types/story";
 import type { SceneBeatNodeSnapshot } from "./types";
 
 type SceneBeatGenerationApi = ReturnType<typeof useSceneBeatGeneration>;
@@ -367,12 +368,7 @@ export function useSceneBeatLifecycle({
 
   useEffect(() => {
     const matchTags = () => {
-      const matched = new Map<string, LorebookEntry>();
-      Object.entries(tagMap).forEach(([tag, entry]) => {
-        if (command.toLowerCase().includes(tag.toLowerCase())) {
-          matched.set(entry.id, entry);
-        }
-      });
+      const matched = matchLorebookEntriesFromTagMap(command, tagMap, "bidirectional");
       set({ localMatchedEntries: matched });
     };
 
