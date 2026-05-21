@@ -21,7 +21,6 @@ import { createPromptParser } from '@/features/prompts/services/promptParser';
 import { sceneBeatService } from '@/features/scenebeats/services/sceneBeatService';
 import { useAgenticGeneration, type AgenticGenerationContext, type AgenticGenerationCallbacks } from '@/features/agents/hooks/useAgenticGeneration';
 import { useParallelGeneration } from '@/features/agents/hooks/useParallelGeneration';
-import { SceneBeatNode } from '@/Lexical/lexical-playground/src/nodes/SceneBeatNode';
 import type {
     Prompt,
     PromptParserConfig,
@@ -29,9 +28,22 @@ import type {
 } from '@/types/story';
 import type { SceneBeatInstanceStoreApi } from '../stores/useSceneBeatInstanceStore';
 
+type SceneBeatSnapshotWriter = {
+    setSceneBeatSnapshot: (snapshot: Record<string, unknown>) => void;
+};
+
+function canWriteSceneBeatSnapshot(node: unknown): node is SceneBeatSnapshotWriter {
+    return Boolean(
+        node &&
+        typeof node === 'object' &&
+        'setSceneBeatSnapshot' in node &&
+        typeof (node as SceneBeatSnapshotWriter).setSceneBeatSnapshot === 'function'
+    );
+}
+
 export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     const [editor] = useLexicalComposerContext();
-    const { generateWithPrompt, processStreamedResponse, abortGeneration } = useAIStore();
+    const { generateWithPrompt, generateWithParsedMessages, processStreamedResponse, abortGeneration } = useAIStore();
     const { prompts, fetchPrompts, isLoading: promptsLoading, error: promptsError } = usePromptStore();
     const { tagMap, chapterMatchedEntries } = useLorebookStore();
 
@@ -39,11 +51,19 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     const agenticHook = useAgenticGeneration();
     const parallelHook = useParallelGeneration();
 
+    const updateNodeSnapshot = useCallback((snapshot: Record<string, unknown>) => {
+        editor.update(() => {
+            const node = $getNodeByKey(store.getState().nodeKey);
+            if (canWriteSceneBeatSnapshot(node)) {
+                node.setSceneBeatSnapshot(snapshot);
+            }
+        });
+    }, [editor, store]);
+
     // ── Prompt config builder ──────────────────────────────────
 
     const createPromptConfig = useCallback((prompt: Prompt): PromptParserConfig => {
         const s = store.getState();
-        if (!s.sceneBeatId) throw new Error('No sceneBeatId');
 
         // Read previous text from the editor
         let previousText = '';
@@ -153,7 +173,22 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
         try {
             store.setState({ streaming: true, streamedText: '', streamComplete: false });
             const config = createPromptConfig(selectedPrompt);
-            const response = await generateWithPrompt(config, selectedModel);
+
+            // Parse the prompt so we can capture messages for regeneration
+            const promptParser = createPromptParser();
+            const parsedPrompt = await promptParser.parse(config);
+            if (parsedPrompt.error || !parsedPrompt.messages?.length) {
+                throw new Error(parsedPrompt.error || 'Failed to parse prompt');
+            }
+
+            // Save parsed messages for potential regeneration later
+            store.setState({ lastGenerationMessages: parsedPrompt.messages });
+
+            const response = await generateWithParsedMessages(
+                parsedPrompt.messages,
+                selectedModel!,
+                selectedPrompt.id
+            );
 
             if (!response.ok && response.status !== 204) throw new Error('Failed to generate response');
             if (response.status === 204) {
@@ -164,7 +199,15 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             await processStreamedResponse(
                 response,
                 (token) => store.getState().appendStreamedText(token),
-                () => store.setState({ streamComplete: true }),
+                () => {
+                    // Save the response text for regeneration
+                    const responseText = store.getState().streamedText;
+                    store.setState({
+                        streamComplete: true,
+                        lastGenerationResponse: responseText,
+                    });
+                    updateNodeSnapshot({ generatedContent: responseText, accepted: false });
+                },
                 (error) => {
                     console.error('Error streaming response:', error);
                     toast.error('Failed to generate text');
@@ -172,9 +215,10 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             );
 
             // Save generated content to database
-            if (sceneBeatId) {
+            const finalSceneBeatId = store.getState().sceneBeatId || sceneBeatId;
+            if (finalSceneBeatId) {
                 try {
-                    await sceneBeatService.updateSceneBeat(sceneBeatId, {
+                    await sceneBeatService.updateSceneBeat(finalSceneBeatId, {
                         generatedContent: store.getState().streamedText,
                         accepted: false,
                     });
@@ -188,7 +232,82 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
         } finally {
             store.setState({ streaming: false });
         }
-    }, [store, createPromptConfig, generateWithPrompt, processStreamedResponse]);
+    }, [store, createPromptConfig, generateWithParsedMessages, processStreamedResponse, updateNodeSnapshot]);
+
+    // ── Regeneration ───────────────────────────────────────────
+
+    const handleRegenerate = useCallback(async (customMessage: string) => {
+        const { lastGenerationMessages, lastGenerationResponse, selectedModel, selectedPrompt, sceneBeatId } = store.getState();
+        if (!lastGenerationMessages || !lastGenerationResponse) {
+            toast.error('No previous generation to regenerate from');
+            return;
+        }
+        if (!selectedModel || !selectedPrompt) {
+            toast.error('No model/prompt selected');
+            return;
+        }
+        try {
+            store.setState({
+                streaming: true,
+                streamedText: '',
+                streamComplete: false,
+                showRegenerateDialog: false,
+            });
+
+            // Build conversation: original messages + assistant response + user refinement
+            const regenMessages = [
+                ...lastGenerationMessages,
+                { role: 'assistant' as const, content: lastGenerationResponse },
+                { role: 'user' as const, content: customMessage },
+            ];
+
+            const response = await generateWithParsedMessages(
+                regenMessages,
+                selectedModel,
+                selectedPrompt.id
+            );
+
+            if (!response.ok && response.status !== 204) throw new Error('Failed to regenerate response');
+            if (response.status === 204) {
+                store.setState({ streaming: false });
+                return;
+            }
+
+            await processStreamedResponse(
+                response,
+                (token) => store.getState().appendStreamedText(token),
+                () => {
+                    const responseText = store.getState().streamedText;
+                    store.setState({
+                        streamComplete: true,
+                        lastGenerationResponse: responseText,
+                    });
+                    updateNodeSnapshot({ generatedContent: responseText, accepted: false });
+                },
+                (error) => {
+                    console.error('Error streaming regenerated response:', error);
+                    toast.error('Failed to regenerate text');
+                }
+            );
+
+            // Save regenerated content to database
+            if (sceneBeatId) {
+                try {
+                    await sceneBeatService.updateSceneBeat(sceneBeatId, {
+                        generatedContent: store.getState().streamedText,
+                        accepted: false,
+                    });
+                } catch (error) {
+                    console.error('Error saving regenerated content:', error);
+                }
+            }
+        } catch (error) {
+            console.error('Error regenerating text:', error);
+            toast.error('Failed to regenerate text');
+        } finally {
+            store.setState({ streaming: false });
+        }
+    }, [store, generateWithParsedMessages, processStreamedResponse, updateNodeSnapshot]);
 
     // ── Agentic generation ─────────────────────────────────────
 
@@ -270,6 +389,10 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 onComplete: (pipelineResult) => {
                     console.log('[Agentic] Pipeline complete:', pipelineResult);
                     store.setState({ streamComplete: true, showAgenticProgress: false });
+                    updateNodeSnapshot({
+                        generatedContent: store.getState().streamedText,
+                        accepted: false,
+                    });
 
                     if (s.sceneBeatId) {
                         sceneBeatService.updateSceneBeat(s.sceneBeatId, {
@@ -293,7 +416,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             console.error('[Agentic] Error:', error);
             toast.error('Failed to run agentic generation');
         }
-    }, [store, editor, chapterMatchedEntries, agenticHook]);
+    }, [store, editor, chapterMatchedEntries, agenticHook, updateNodeSnapshot]);
 
     const handleAbortAgentic = useCallback(() => {
         agenticHook.abortGeneration();
@@ -354,12 +477,14 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 console.error('Error updating accepted status:', error);
             }
         }
+        updateNodeSnapshot({ generatedContent: streamedText, accepted: true });
         store.getState().resetGeneration();
-    }, [store, editor]);
+    }, [store, editor, updateNodeSnapshot]);
 
     const handleReject = useCallback(() => {
+        updateNodeSnapshot({ generatedContent: '', accepted: false });
         store.getState().resetGeneration();
-    }, [store]);
+    }, [store, updateNodeSnapshot]);
 
     // ── Delete ─────────────────────────────────────────────────
 
@@ -412,6 +537,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
         handleParallelAccept,
         handleAccept,
         handleReject,
+        handleRegenerate,
         handleDelete,
         abortGeneration,
     };

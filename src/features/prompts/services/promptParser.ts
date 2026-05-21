@@ -227,6 +227,17 @@ export class PromptParser {
         return result;
     }
 
+    private filterTimelineEntries(entries: LorebookEntry[], currentChapterOrder?: number): LorebookEntry[] {
+        return entries.filter(entry => {
+            if (entry.category === 'timeline' && entry.metadata?.chapterOrder !== undefined) {
+                if (currentChapterOrder !== undefined) {
+                    return entry.metadata.chapterOrder <= currentChapterOrder;
+                }
+            }
+            return true;
+        });
+    }
+
     private async resolveLorebookSceneBeatEntries(context: PromptContext): Promise<string> {
 
         if (!context.sceneBeatMatchedEntries || context.sceneBeatMatchedEntries.size === 0) {
@@ -234,8 +245,11 @@ export class PromptParser {
         }
 
         // Filter out disabled entries
-        const entries = Array.from(context.sceneBeatMatchedEntries)
+        let entries = Array.from(context.sceneBeatMatchedEntries)
             .filter(entry => !entry.isDisabled);
+            
+        // Filter out future timeline entries
+        entries = this.filterTimelineEntries(entries, context.currentChapter?.order);
 
         if (entries.length === 0) {
             return '';
@@ -421,8 +435,11 @@ export class PromptParser {
         }
 
         // Filter out disabled entries
-        const entries = Array.from(context.chapterMatchedEntries)
+        let entries = Array.from(context.chapterMatchedEntries)
             .filter(entry => !entry.isDisabled);
+            
+        // Filter out future timeline entries
+        entries = this.filterTimelineEntries(entries, context.currentChapter?.order);
 
         if (entries.length === 0) {
             return '';
@@ -489,6 +506,9 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
         if (category) {
             entries = entries.filter(entry => entry.category === category);
         }
+        
+        // Filter out future timeline entries
+        entries = this.filterTimelineEntries(entries, context.currentChapter?.order);
 
         return this.formatLorebookEntries(entries);
     }
@@ -529,7 +549,10 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
             const chapterSummary = await chapterStore.getAllChapterSummaries(context.storyId);
 
             // Get all lorebook entries
-            const entries = lorebookStore.getAllEntries();
+            let entries = lorebookStore.getAllEntries();
+            
+            // Filter out future timeline entries
+            entries = this.filterTimelineEntries(entries, context.currentChapter?.order);
 
             // Format the result
             let result = '';
@@ -645,6 +668,10 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
             entries = lorebookStore.entries.filter(entry =>
                 selectedItemIds.includes(entry.id)
             );
+            
+            // Filter out future timeline entries
+            entries = this.filterTimelineEntries(entries, context.currentChapter?.order);
+            
             if (entries.length > 0) {
                 result += "Story World Information:\n";
                 result += this.formatLorebookEntries(entries);
@@ -699,7 +726,12 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
     private async resolveAllTimelines(context: PromptContext): Promise<string> {
         const { getAllTimelines } = useLorebookStore.getState();
         // getAllTimelines already filters out disabled entries
-        return this.formatLorebookEntries(getAllTimelines());
+        let entries = getAllTimelines();
+        
+        // Filter out future timeline entries
+        entries = this.filterTimelineEntries(entries, context.currentChapter?.order);
+        
+        return this.formatLorebookEntries(entries);
     }
 
     private async resolveSceneBeatContext(context: PromptContext): Promise<string> {
@@ -751,7 +783,7 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
         }
 
         // Convert the map to an array and sort by importance
-        const sortedEntries = Array.from(uniqueEntries.values()).sort(
+        let sortedEntries = Array.from(uniqueEntries.values()).sort(
             (a, b) => {
                 const importanceOrder = { 'major': 3, 'minor': 2, 'background': 1 };
                 const aImportance = a.metadata?.importance || 'background';
@@ -759,6 +791,9 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
                 return importanceOrder[bImportance] - importanceOrder[aImportance];
             }
         );
+        
+        // Filter out future timeline entries
+        sortedEntries = this.filterTimelineEntries(sortedEntries, context.currentChapter?.order);
 
         // If we have no entries, return an empty string
         if (sortedEntries.length === 0) {
