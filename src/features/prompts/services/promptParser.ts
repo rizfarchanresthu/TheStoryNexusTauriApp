@@ -102,6 +102,10 @@ export class PromptParser {
                 const resolved = await this.resolvePreviousWords(context, args.trim());
                 parsedContent = parsedContent.replace(fullMatch, resolved);
             }
+            if (func === 'previous_words_any_pov') {
+                const resolved = await this.resolvePreviousWords(context, args.trim(), true);
+                parsedContent = parsedContent.replace(fullMatch, resolved);
+            }
             if (func === 'chapter_data') {
                 const resolved = await this.resolveChapterData(args.trim());
                 parsedContent = parsedContent.replace(fullMatch, resolved);
@@ -190,7 +194,11 @@ export class PromptParser {
             const [varName, ...params] = variable.trim().split(' ');
 
             if (varName === 'scenebeat' && context.scenebeat) {
-                result = result.replace(fullMatch, context.scenebeat);
+                const parsedScenebeat = await this.parseContent(
+                    context.scenebeat,
+                    { ...context, scenebeat: undefined }
+                );
+                result = result.replace(fullMatch, parsedScenebeat);
                 continue;
             }
 
@@ -281,7 +289,7 @@ export class PromptParser {
         }
     }
 
-    private async resolvePreviousWords(context: PromptContext, count: string = '1000'): Promise<string> {
+    private async resolvePreviousWords(context: PromptContext, count: string = '1000', ignorePov = false): Promise<string> {
         // Parse the count parameter - default to 1000 if not a valid number
         const requestedWordCount = parseInt(count, 10) || 1000;
 
@@ -341,7 +349,7 @@ export class PromptParser {
                         // If both are the same type and have the same character
                         (currentPovType === prevPovType && currentPovCharacter === prevPovCharacter);
 
-                    if (!povMatches) {
+                    if (!ignorePov && !povMatches) {
                         // POV doesn't match, stop looking for more chapters
                         console.log(`Previous chapter ${previousChapter.order} POV does not match current chapter POV, stopping`);
                         break;

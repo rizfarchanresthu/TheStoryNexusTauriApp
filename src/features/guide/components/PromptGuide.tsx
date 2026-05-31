@@ -356,7 +356,7 @@ export default function PromptGuide() {
                                     <tbody>
                                         <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;scenebeat&#125;&#125;</td>
-                                            <td className="border p-2">The scene beat command you enter</td>
+                                            <td className="border p-2">The scene beat command you enter. You can also use other variables inside the command field; they are resolved at generation and preview time.</td>
                                         </tr>
                                         <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;scenebeat_context&#125;&#125;</td>
@@ -373,6 +373,10 @@ export default function PromptGuide() {
                                         <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;previous_words(1000)&#125;&#125;</td>
                                             <td className="border p-2">The last 1000 words before the cursor in the editor</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="border p-2 font-mono text-sm">&#123;&#123;previous_words_any_pov(1000)&#125;&#125;</td>
+                                            <td className="border p-2">Same as previous_words, but continues into prior chapters even when POV differs (useful after POV switches)</td>
                                         </tr>
                                         <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;pov&#125;&#125;</td>
