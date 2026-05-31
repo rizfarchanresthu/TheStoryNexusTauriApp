@@ -672,6 +672,14 @@ export class AIService {
         }
         if (tools?.length) { (body as any).tools = tools; }
 
+        Object.assign(body, {
+            provider: { 
+                only: ['AtlasCloud', 'NovitaAI'], 
+                allow_fallbacks: false,
+                ignore: ['deepinfra'],
+            },
+        });
+
         this.abortController = new AbortController();
 
         try {
