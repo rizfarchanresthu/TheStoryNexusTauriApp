@@ -6,13 +6,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { usePromptStore } from '../store/promptStore';
 import { useAIStore } from '@/features/ai/stores/useAIStore';
-import type { Prompt, PromptMessage, AIModel, AllowedModel } from '@/types/story';
-import { Plus, ArrowUp, ArrowDown, Trash2, X, Star, Layers } from 'lucide-react';
+import { aiService } from '@/services/ai/AIService';
+import { PromptVariableReference } from './PromptVariableReference';
+import type { Prompt, PromptMessage, AIModel, AllowedModel, AIProvider } from '@/types/story';
+import { Plus, ArrowUp, ArrowDown, Trash2, X, Star, Layers, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { getSelectableModelsWithLocalDefault, normalizeAllowedModel } from '@/features/ai/utils/defaultModels';
 import {
     Collapsible,
     CollapsibleContent,
@@ -42,6 +45,7 @@ interface PromptFormProps {
 }
 
 export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
+    const isSystemPrompt = prompt?.isSystem === true;
     const [name, setName] = useState(prompt?.name || '');
     const [messages, setMessages] = useState<PromptMessage[]>(
         prompt?.messages || [{ role: 'system', content: '' }]
@@ -49,24 +53,29 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
     const [promptType, setPromptType] = useState<PromptType>(prompt?.promptType || 'scene_beat');
     const isImagePrompt = promptType === 'image_gen';
     const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
-    const [selectedModels, setSelectedModels] = useState<AllowedModel[]>(prompt?.allowedModels || []);
+    const [selectedModels, setSelectedModels] = useState<AllowedModel[]>(
+        (prompt?.allowedModels || []).map(normalizeAllowedModel)
+    );
     const { createPrompt, updatePrompt } = usePromptStore();
     const [temperature, setTemperature] = useState(prompt?.temperature || 1.0);
     const [maxTokens, setMaxTokens] = useState(prompt?.maxTokens || 2048);
-    const [topP, setTopP] = useState(prompt?.top_p !== undefined ? prompt.top_p : 1.0);
-    const [topK, setTopK] = useState(prompt?.top_k !== undefined ? prompt.top_k : 50);
+    const [topP, setTopP] = useState(isSystemPrompt ? 0 : (prompt?.top_p !== undefined ? prompt.top_p : 1.0));
+    const [topK, setTopK] = useState(isSystemPrompt ? 0 : (prompt?.top_k !== undefined ? prompt.top_k : 50));
     const [repetitionPenalty, setRepetitionPenalty] = useState(
-        prompt?.repetition_penalty !== undefined ? prompt.repetition_penalty : 1.0
+        isSystemPrompt ? 0 : (prompt?.repetition_penalty !== undefined ? prompt.repetition_penalty : 1.0)
     );
     const [minP, setMinP] = useState(
-        prompt?.min_p !== undefined ? prompt.min_p : 0.0
+        isSystemPrompt ? 0 : (prompt?.min_p !== undefined ? prompt.min_p : 0.0)
     );
     const [showProviderLabels, setShowProviderLabels] = useState(true);
     
     // Multi-model comparison state
     const [multiModelEnabled, setMultiModelEnabled] = useState(prompt?.multiModelEnabled || false);
-    const [parallelModels, setParallelModels] = useState<AllowedModel[]>(prompt?.parallelModels || []);
+    const [parallelModels, setParallelModels] = useState<AllowedModel[]>(
+        (prompt?.parallelModels || []).map(normalizeAllowedModel)
+    );
     const [parallelModelSearch, setParallelModelSearch] = useState('');
+    const [isRefreshingAllModels, setIsRefreshingAllModels] = useState(false);
 
     const {
         initialize,
@@ -106,8 +115,89 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
         }
     };
 
+    const getRefreshableProviders = (): AIProvider[] => {
+        const providers: AIProvider[] = ['local'];
+
+        if (aiService.getOpenAIKey()) providers.push('openai');
+        if (aiService.getOpenRouterKey()) providers.push('openrouter');
+        if (aiService.getNanoGPTKey()) providers.push('nanogpt');
+        if (aiService.getGoogleKey()) providers.push('google');
+        if (aiService.getOpenAICompatibleKey() && aiService.getOpenAICompatibleUrl()) {
+            providers.push('openai_compatible');
+        }
+
+        return providers;
+    };
+
+    const formatProviderName = (provider: AIProvider) => {
+        switch (provider) {
+            case 'openai':
+                return 'OpenAI';
+            case 'openrouter':
+                return 'OpenRouter';
+            case 'nanogpt':
+                return 'NanoGPT';
+            case 'google':
+                return 'Google AI';
+            case 'openai_compatible':
+                return 'OpenAI-compatible';
+            case 'local':
+                return 'Local';
+            default:
+                return provider;
+        }
+    };
+
+    const handleRefreshAllModels = async () => {
+        setIsRefreshingAllModels(true);
+        try {
+            if (!isInitialized) {
+                await initialize();
+            }
+
+            // Sync service settings from IndexedDB before checking configured keys.
+            await getAvailableModels(undefined, false);
+
+            const providers = getRefreshableProviders();
+
+            const results = await Promise.allSettled(
+                providers.map(async (provider) => {
+                    const models = await getAvailableModels(provider, true);
+                    return { provider, count: models.length };
+                })
+            );
+
+            const refreshedModels = await getAvailableModels(undefined, false);
+            setAvailableModels(refreshedModels);
+
+            const succeeded = results
+                .filter((result): result is PromiseFulfilledResult<{ provider: AIProvider; count: number }> => result.status === 'fulfilled')
+                .map((result) => result.value);
+            const failed = results
+                .map((result, index) => result.status === 'rejected' ? providers[index] : null)
+                .filter((provider): provider is AIProvider => provider !== null);
+
+            if (failed.length === 0) {
+                toast.success(`Refreshed ${succeeded.length} provider${succeeded.length === 1 ? '' : 's'}`);
+            } else if (succeeded.length > 0) {
+                toast.warning(`Refreshed ${succeeded.length} provider${succeeded.length === 1 ? '' : 's'}; failed: ${failed.map(formatProviderName).join(', ')}`);
+            } else {
+                toast.error(`Failed to refresh: ${failed.map(formatProviderName).join(', ')}`);
+            }
+        } catch (error) {
+            console.error('Failed to refresh all models:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to refresh models');
+        } finally {
+            setIsRefreshingAllModels(false);
+        }
+    };
+
     // Helper to create unique model key (provider:id)
     const getModelKey = (model: { provider: string; id: string }) => `${model.provider}:${model.id}`;
+    const selectableModels = useMemo(
+        () => getSelectableModelsWithLocalDefault(availableModels),
+        [availableModels]
+    );
 
     const modelGroups = useMemo(() => {
         const groups: ModelsByProvider = {
@@ -125,7 +215,7 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
             'Free': [],
             'Other': []
         };
-        availableModels.forEach(model => {
+        selectableModels.forEach(model => {
             const modelKey = `${model.provider}:${model.id}`;
             // Add to Favorites if favorited
             if (favoriteModelIds.includes(modelKey)) {
@@ -165,7 +255,7 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
         return Object.fromEntries(
             Object.entries(groups).filter(([key, models]) => key === 'Favorites' || models.length > 0)
         );
-    }, [availableModels, favoriteModelIds]);
+    }, [selectableModels, favoriteModelIds]);
 
     // Simple search state for the popover-based selector (placed after modelGroups memo)
     const [modelSearch, setModelSearch] = useState('');
@@ -336,6 +426,11 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
             />
 
             <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-medium">Messages</h3>
+                    <PromptVariableReference />
+                </div>
+
                 {messages.map((message, index) => (
                     <div key={index} className="space-y-2 p-4 border rounded-lg">
                         <div className="flex items-center justify-between gap-2">
@@ -438,17 +533,29 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
             </div>}
 
             {!isImagePrompt && <div className="border-t border-input pt-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="font-medium">Available Models</h3>
-                    <div className="flex items-center gap-2">
-                        <Label htmlFor="show-provider" className="text-sm font-normal cursor-pointer">
-                            Show provider labels
-                        </Label>
-                        <Switch
-                            id="show-provider"
-                            checked={showProviderLabels}
-                            onCheckedChange={setShowProviderLabels}
-                        />
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRefreshAllModels}
+                            disabled={isRefreshingAllModels || isAILoading}
+                        >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshingAllModels ? 'animate-spin' : ''}`} />
+                            Refresh all
+                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="show-provider" className="text-sm font-normal cursor-pointer">
+                                Show provider labels
+                            </Label>
+                            <Switch
+                                id="show-provider"
+                                checked={showProviderLabels}
+                                onCheckedChange={setShowProviderLabels}
+                            />
+                        </div>
                     </div>
                 </div>
 

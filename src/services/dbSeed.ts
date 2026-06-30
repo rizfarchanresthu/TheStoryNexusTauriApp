@@ -40,6 +40,8 @@ export class DatabaseSeeder {
         console.log("Database already contains system prompts. Skipping prompt seeding.");
       }
 
+      await this.syncContinueWritingSystemPrompt();
+      await this.disableSystemPromptAdvancedSampling();
       await this.seedExampleStory(forceReseed);
 
       console.log("Database seeding complete.");
@@ -127,21 +129,60 @@ export class DatabaseSeeder {
     }
   }
 
+  private async syncContinueWritingSystemPrompt(): Promise<void> {
+    const promptData = systemPrompts.find((prompt) => prompt.id === "continue-writing-system");
+    if (!promptData?.id) return;
+
+    const existing = await db.prompts.get(promptData.id);
+    if (!existing?.isSystem) return;
+
+    const existingMessages = JSON.stringify(existing.messages ?? []);
+    if (existingMessages.includes("{{after_words")) return;
+
+    console.log("Updating Continue Writing system prompt with after-cursor context support.");
+    await db.prompts.update(promptData.id, {
+      ...promptData,
+      createdAt: existing.createdAt,
+      isSystem: true,
+    });
+  }
+
+  private async disableSystemPromptAdvancedSampling(): Promise<void> {
+    await db.transaction("rw", db.prompts, async () => {
+      for (const promptData of systemPrompts) {
+        const existingPrompt = await db.prompts.get(promptData.id!);
+        if (!existingPrompt?.isSystem) continue;
+
+        await db.prompts.update(promptData.id!, {
+          top_p: 0,
+          top_k: 0,
+          repetition_penalty: 0,
+          min_p: 0,
+        });
+      }
+    });
+  }
+
   /**
-   * Seed the example fantasy story from docs/ExampleStory.md.
+   * Seed the example story from docs/ExampleStory.md.
    * This runs independently from prompt seeding so existing local databases get
    * the test story on their next startup without duplicate rows.
    */
   private async seedExampleStory(forceReseed = false): Promise<void> {
     const existing = await db.stories.get(EXAMPLE_STORY_ID);
 
-    if (existing && !forceReseed) {
+    const shouldReplaceLegacyDemo =
+      existing?.isDemo === true &&
+      existing.title === "Iron Salt" &&
+      exampleStorySeed.story.title !== existing.title;
+
+    if (existing && !forceReseed && !shouldReplaceLegacyDemo) {
       await this.repairExistingExampleStoryChapters();
       console.log("Example story already exists. Skipping.");
       return;
     }
 
-    if (existing && forceReseed) {
+    if (existing && (forceReseed || shouldReplaceLegacyDemo)) {
       console.log("Force reseeding - replacing example story...");
       await db.deleteStoryWithRelated(EXAMPLE_STORY_ID);
     }

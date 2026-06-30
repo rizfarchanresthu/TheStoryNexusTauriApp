@@ -8,7 +8,7 @@ This document captures how the app currently works before a full UI overhaul. It
 
 The Story Nexus is a local-first desktop writing app built with Tauri, React, TypeScript, Tailwind, Shadcn/Radix UI, Zustand, Dexie/IndexedDB, and Lexical. The core promise is an AI-assisted creative writing workspace where a writer can manage stories, chapters, lore, reusable prompts, brainstorm chats, agent pipelines, drafts, notes, and generated prose.
 
-The app is organized around a story dashboard. A story contains chapters and story-scoped creative context. The chapter editor is the densest workspace: it embeds the Lexical editor and exposes side panels for matched lorebook tags, outline, POV, timeline extraction, chapter notes, drafts, saved chats, brainstorm, lorebook, prompts, prompt defaults, AI settings, and guides.
+The app is organized around a story dashboard. A story contains chapters and story-scoped creative context. The chapter editor is the densest workspace: it embeds the Lexical editor and exposes side panels for matched lorebook aliases, outline, POV, timeline extraction, chapter notes, drafts, saved chats, brainstorm, lorebook, prompts, prompt defaults, AI settings, and guides.
 
 ## Current Navigation
 
@@ -41,7 +41,7 @@ Main tables:
 - `aiChats`: brainstorm and saved AI chat transcripts.
 - `prompts`: system and user prompts with messages, allowed models, sampling settings, and parallel model options.
 - `aiSettings`: provider keys, local/custom endpoints, fetched model list, favorites, Tavily key, and prompt defaults.
-- `lorebookEntries`: story knowledge base entries with category, tags, description, metadata, and disabled state.
+- `lorebookEntries`: story knowledge base entries with category, aliases, descriptive tags, description, metadata, and disabled state.
 - `templates`: reusable chat insertion snippets.
 - `sceneBeats`: embedded editor commands and generated text tied to a story/chapter.
 - `drafts`: persisted AI-generated prose candidates.
@@ -86,7 +86,7 @@ The main editor component is `StoryEditor`. It combines:
 
 The editor tools currently include:
 
-- Matched Tags
+- Matched Aliases
 - Chapter Outline
 - Edit POV
 - Extract Timeline
@@ -110,7 +110,7 @@ Key app-specific plugins/nodes:
 
 - `LoadChapterContentPlugin` loads `currentChapter.content` into Lexical when a chapter opens.
 - `SaveChapterContentPlugin` serializes editor state to JSON and debounced-saves it to the chapter after editor updates.
-- `LorebookTagPlugin` scans editor text against the lorebook tag map and updates `chapterMatchedEntries`.
+- `LorebookHighlightPlugin` scans editor text against the lorebook alias map and updates `chapterMatchedEntries`.
 - `SceneBeatShortcutPlugin` inserts a `SceneBeatNode` with the keyboard shortcut, currently documented as Alt/Option + S in the README.
 - `SceneBeatNode` is a DecoratorNode that renders a full AI command panel inside the editor.
 
@@ -129,22 +129,24 @@ Entry categories:
 - `note`
 - `synopsis`
 - `starting scenario`
-- `timeline`
 
-Each entry has a name, description, tags, optional metadata, and `isDisabled`. Disabled entries are excluded from tag maps and most context helpers.
+Each entry has a name, description, aliases, descriptive tags, optional metadata, and `isDisabled`. Disabled entries are excluded from alias maps and most context helpers.
 
 Important lorebook behavior:
 
-- `buildTagMap` maps entry names and tags to entries for case-insensitive matching.
-- Multi-word tags are kept as full tags; individual words are only added if also explicitly present as standalone tags.
-- The editor-level `LorebookTagPlugin` matches lorebook tags in chapter text and stores chapter matches in `chapterMatchedEntries`.
-- Scene beats also match tags locally against the scene beat command.
-- Prompt parsing can include matched chapter entries, scene beat entries, all entries, entries by category, character lookup, and timeline-filtered context.
-- Timeline entries with `metadata.chapterOrder` are filtered out if they are in the future relative to the current chapter.
+- `buildAliasMap` maps entry names and aliases to entries for case-insensitive matching.
+- Multi-word aliases are kept as full aliases; individual words are only added if also explicitly present as standalone aliases.
+- The editor-level `LorebookHighlightPlugin` matches lorebook aliases in chapter text and stores chapter matches in `chapterMatchedEntries`.
+- Scene beats also match aliases locally against the scene beat command.
+- Prompt parsing can include matched chapter entries, scene beat entries, all entries, entries by category, and character lookup.
 - Lorebook import/export uses JSON with `{ version, type: "lorebook", entries }`.
 - Brainstorm responses can be parsed for JSON lorebook entries and passed into `CreateEntryDialog`.
 
-The lorebook UI exists as both a full page and a compact editor sheet. The full page includes category tabs and a special timeline view. The editor panel groups entries by category and supports create, edit, delete, enable, and disable.
+The lorebook UI exists as both a full page and a compact editor sheet. The editor panel groups entries by category and supports create, edit, delete, enable, and disable.
+
+## Timeline
+
+Timeline events are story-scoped records managed separately from lorebook entries. They store chapter linkage, event order, title, summary, optional time label, optional location lorebook link, participant lorebook links, and unresolved participant names from extraction. Prompt parsing can include timeline context with future events filtered out relative to the current chapter.
 
 ## Prompts
 
@@ -185,6 +187,8 @@ Important variables include:
 - `{{scenebeat}}`
 - `{{previous_words}}` and `{{previous_words(1000)}}`
 - `{{summaries}}`
+- `{{all_previous_chapters}}`
+- `{{previous_chapter(2)}}`
 - `{{pov}}`
 - `{{chapter_content}}`
 - `{{selected_text}}` / `{{selection}}`
@@ -291,7 +295,7 @@ Scene beat lifecycle:
 2. The node renders `SceneBeatComponent`, which creates a per-instance Zustand store.
 3. If the node has no scene beat ID, it creates a database row using the current story/chapter.
 4. The command textarea is debounced-saved to the row.
-5. The command is scanned against lorebook tags for local matches.
+5. The command is scanned against lorebook aliases for local matches.
 6. User selects prompt/model or an agent pipeline.
 7. Generation streams into the scene beat panel.
 8. Accept inserts generated prose as a paragraph after the scene beat node.
@@ -393,7 +397,7 @@ The current code already supports this mental model. The overhaul should mostly 
 - Editor shell: `src/features/chapters/components/StoryEditor.tsx`
 - Embedded editor wrapper: `src/Lexical/lexical-playground/src/EmbeddedPlayground.tsx`
 - Editor save/load: `src/Lexical/lexical-playground/src/plugins/SaveChapterContent`, `src/Lexical/lexical-playground/src/plugins/LoadChapterContent`
-- Lorebook tag matching: `src/Lexical/lexical-playground/src/plugins/LorebookTagPlugin`
+- Lorebook alias matching: `src/components/editor/mainLexicalEditor/plugins/LorebookHighlightPlugin.tsx`
 - Scene beat node: `src/Lexical/lexical-playground/src/nodes/SceneBeatNode.tsx`
 - Scene beat generation hook: `src/features/scenebeats/hooks/useSceneBeatGeneration.ts`
 - Scene beat service/store: `src/features/scenebeats/services/sceneBeatService.ts`, `src/features/scenebeats/stores/useSceneBeatStore.ts`

@@ -5,6 +5,14 @@ interface BaseEntity {
   isDemo?: boolean; // Flag to identify demo content
 }
 
+export type PovType =
+  | "First Person"
+  | "Second Person"
+  | "Third Person"
+  | "Third Person Limited"
+  | "Third Person Omniscient"
+  | "Third Person (Objective)";
+
 // Core story type
 export interface Story extends BaseEntity {
   title: string;
@@ -23,7 +31,7 @@ export interface Chapter extends BaseEntity {
   outline?: ChapterOutline;
   wordCount: number;
   povCharacter?: string;
-  povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
+  povType?: PovType;
   notes?: ChapterNotes;
 }
 
@@ -42,7 +50,7 @@ export interface SceneBeat extends BaseEntity {
   storyId: string;
   chapterId: string;
   command: string;
-  povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
+  povType?: PovType;
   povCharacter?: string;
   generatedContent?: string; // To store the last generated content
   accepted?: boolean; // Whether the generated content was accepted
@@ -83,12 +91,20 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  brainstormOutputMode?: BrainstormOutputMode;
   // Optional edit metadata
   originalContent?: string; // the original content before the first edit
   editedAt?: string; // ISO timestamp when last edited
   editedBy?: string; // who edited it (e.g., 'user')
   edited?: boolean; // convenience flag
 }
+
+export type BrainstormOutputMode =
+  | "normal"
+  | "lorebook_entries"
+  | "chapter_outline"
+  | "story_decisions"
+  | "open_questions";
 
 // Prompt related types
 export interface PromptMessage {
@@ -150,6 +166,12 @@ export type AIProvider =
   | "nanogpt"
   | "google";
 
+export type LocalAIRuntime =
+  | "lm_studio"
+  | "ollama"
+  | "llama_cpp"
+  | "custom_openai";
+
 export interface AIModel {
   id: string;
   name: string;
@@ -170,13 +192,20 @@ export interface AISettings extends BaseEntity {
   openaiCompatibleModelsRoute?: string; // Custom route for fetching models (e.g., '/v1/models' or '/api/models')
   availableModels: AIModel[];
   lastModelsFetch?: Date;
+  localRuntime?: LocalAIRuntime;
   localApiUrl?: string;
+  localModelsUrl?: string;
+  localModelIdByRuntime?: Partial<Record<LocalAIRuntime, string>>;
   favoriteModelIds?: string[]; // User's favorited model IDs
   
   // Prompt Defaults
   enablePromptDefaults?: boolean;
   defaultSceneBeatPromptId?: string;
   defaultSceneBeatModelId?: string;
+  defaultContinueWritingPromptId?: string;
+  defaultContinueWritingModelId?: string;
+  simpleWriteUseCustomPrompt?: boolean;
+  simpleWriteIncludeAfterCursor?: boolean;
   defaultBrainstormPromptId?: string;
   defaultBrainstormModelId?: string;
   defaultAgentModelId?: string;
@@ -299,9 +328,10 @@ export interface LorebookEntry extends BaseEntity {
     | "event"
     | "note"
     | "synopsis"
-    | "starting scenario"
-    | "timeline";
-  // Tags are stored as an array of strings, can contain spaces and special characters
+    | "starting scenario";
+  // Aliases are lookup phrases used for lore matching in chapters and SceneBeats.
+  aliases: string[];
+  // Tags are descriptive labels for filtering and organization.
   tags: string[];
   metadata?: {
     type?: string;
@@ -312,10 +342,25 @@ export interface LorebookEntry extends BaseEntity {
       type: string;
       description?: string;
     }>;
-    chapterOrder?: number; // Added for Timeline isolation
-    participantIds?: string[]; // Added for Timeline isolation
     customFields?: Record<string, unknown>;
   };
+  isDisabled?: boolean;
+}
+
+export interface TimelineEvent extends BaseEntity {
+  storyId: string;
+  chapterId?: string;
+  chapterOrder?: number;
+  eventOrder: number;
+  title: string;
+  summary: string;
+  participantIds: string[];
+  unresolvedParticipants?: string[];
+  relatedLorebookEntryIds?: string[];
+  locationId?: string;
+  timeLabel?: string;
+  source: "manual" | "extracted";
+  updatedAt?: Date;
   isDisabled?: boolean;
 }
 
@@ -327,12 +372,13 @@ export interface PromptParserConfig {
   scenebeat?: string;
   cursorPosition?: number;
   previousWords?: string;
+  afterWords?: string;
   matchedEntries?: Set<LorebookEntry>;
   additionalContext?: Record<string, any>;
   chapterMatchedEntries?: Set<LorebookEntry>;
   sceneBeatMatchedEntries?: Set<LorebookEntry>;
   povCharacter?: string;
-  povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
+  povType?: PovType;
   storyLanguage?: string;
   sceneBeatContext?: {
     useMatchedChapter: boolean;
@@ -348,6 +394,7 @@ export interface PromptContext {
   scenebeat?: string;
   cursorPosition?: number;
   previousWords?: string;
+  afterWords?: string;
   matchedEntries?: Set<LorebookEntry>;
   chapters?: Chapter[];
   currentChapter?: Chapter;
@@ -355,7 +402,7 @@ export interface PromptContext {
   chapterMatchedEntries?: Set<LorebookEntry>;
   sceneBeatMatchedEntries?: Set<LorebookEntry>;
   povCharacter?: string;
-  povType?: "First Person" | "Third Person Limited" | "Third Person Omniscient";
+  povType?: PovType;
   storyLanguage?: string;
   sceneBeatContext?: {
     useMatchedChapter: boolean;

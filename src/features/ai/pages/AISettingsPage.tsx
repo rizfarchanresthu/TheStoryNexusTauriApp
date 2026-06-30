@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { aiService } from '@/services/ai/AIService';
 import { toast } from 'react-toastify';
-import { AIModel } from '@/types/story';
+import { AIModel, LocalAIRuntime } from '@/types/story';
 import { cn } from '@/lib/utils';
+import { LOCAL_RUNTIME_PRESETS } from '@/services/ai/localRuntime';
+import { isLocalDefaultModel } from '@/features/ai/utils/defaultModels';
 
 export default function AISettingsPage() {
     const [openaiKey, setOpenaiKey] = useState('');
@@ -18,9 +21,12 @@ export default function AISettingsPage() {
     const [openaiCompatibleUrl, setOpenaiCompatibleUrl] = useState('');
     const [openaiCompatibleModelsRoute, setOpenaiCompatibleModelsRoute] = useState('');
     const [googleKey, setGoogleKey] = useState('');
-    const [tavilyKey, setTavilyKey] = useState('');
+    const [localRuntime, setLocalRuntime] = useState<LocalAIRuntime>('lm_studio');
     const [localApiUrl, setLocalApiUrl] = useState('http://localhost:1234/v1');
+    const [localModelsUrl, setLocalModelsUrl] = useState('http://localhost:1234/v1/models');
+    const [localDefaultModelId, setLocalDefaultModelId] = useState('auto');
     const [isLoading, setIsLoading] = useState(false);
+    const [localModels, setLocalModels] = useState<AIModel[]>([]);
     const [openaiModels, setOpenaiModels] = useState<AIModel[]>([]);
     const [openrouterModels, setOpenrouterModels] = useState<AIModel[]>([]);
     const [nanogptModels, setNanogptModels] = useState<AIModel[]>([]);
@@ -45,8 +51,10 @@ export default function AISettingsPage() {
             const openaiCompatibleUrl = aiService.getOpenAICompatibleUrl();
             const openaiCompatibleModelsRoute = aiService.getOpenAICompatibleModelsRoute();
             const googleKey = aiService.getGoogleKey();
-            const tavilyKey = aiService.getTavilyKey();
+            const localRuntime = aiService.getLocalRuntime();
             const localApiUrl = aiService.getLocalApiUrl();
+            const localModelsUrl = aiService.getLocalModelsUrl();
+            const localDefaultModelId = aiService.getLocalDefaultModelId();
 
             console.log('[AISettingsPage] Retrieved API keys and URL from service');
             if (openaiKey) setOpenaiKey(openaiKey);
@@ -56,8 +64,10 @@ export default function AISettingsPage() {
             if (openaiCompatibleUrl) setOpenaiCompatibleUrl(openaiCompatibleUrl);
             if (openaiCompatibleModelsRoute) setOpenaiCompatibleModelsRoute(openaiCompatibleModelsRoute);
             if (googleKey) setGoogleKey(googleKey);
-            if (tavilyKey) setTavilyKey(tavilyKey);
+            setLocalRuntime(localRuntime);
             if (localApiUrl) setLocalApiUrl(localApiUrl);
+            if (localModelsUrl) setLocalModelsUrl(localModelsUrl);
+            setLocalDefaultModelId(localDefaultModelId || 'auto');
 
             console.log('[AISettingsPage] Getting all available models');
             // Don't force refresh on initial load to avoid unnecessary API calls
@@ -73,6 +83,7 @@ export default function AISettingsPage() {
 
             console.log(`[AISettingsPage] Filtered models - Local: ${localModels.length}, OpenAI: ${openaiModels.length}, OpenRouter: ${openrouterModels.length}, NanoGPT: ${nanogptModels.length}, Google: ${googleModels.length}`);
 
+            setLocalModels(localModels);
             setOpenaiModels(openaiModels);
             setOpenrouterModels(openrouterModels);
             setNanogptModels(nanogptModels);
@@ -112,34 +123,13 @@ export default function AISettingsPage() {
                 setOpenSections(prev => ({ ...prev, google: true }));
             } else if (provider === 'local') {
                 console.log(`[AISettingsPage] Updating local models, received ${models.length} models`);
-                setOpenaiModels(prev => {
-                    const filtered = prev.filter(m => m.provider !== 'local');
-                    console.log(`[AISettingsPage] Filtered out ${prev.length - filtered.length} old local models`);
-                    const newModels = [...filtered, ...models];
-                    console.log(`[AISettingsPage] New models array has ${newModels.length} models`);
-                    return newModels;
-                });
+                setLocalModels(models);
                 setOpenSections(prev => ({ ...prev, local: true }));
             }
 
             toast.success(`${provider === 'openai' ? 'OpenAI' : provider === 'openrouter' ? 'OpenRouter' : provider === 'nanogpt' ? 'NanoGPT' : provider === 'openai_compatible' ? 'OpenAI-compatible' : 'Local'} models updated successfully`);
         } catch (error) {
             toast.error(`Failed to update ${provider} models`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleTavilyKeyUpdate = async (key: string) => {
-        if (!key.trim()) return;
-
-        setIsLoading(true);
-        try {
-            await aiService.updateTavilyKey(key);
-            toast.success('Tavily API key updated successfully');
-        } catch (error) {
-            console.error('Error updating Tavily key:', error);
-            toast.error('Failed to update Tavily API key');
         } finally {
             setIsLoading(false);
         }
@@ -176,13 +166,7 @@ export default function AISettingsPage() {
                     break;
                 case 'local':
                     console.log(`[AISettingsPage] Updating local models, received ${models.length} models`);
-                    setOpenaiModels(prev => {
-                        const filtered = prev.filter(m => m.provider !== 'local');
-                        console.log(`[AISettingsPage] Filtered out ${prev.length - filtered.length} old local models`);
-                        const newModels = [...filtered, ...models];
-                        console.log(`[AISettingsPage] New models array has ${newModels.length} models`);
-                        return newModels;
-                    });
+                    setLocalModels(models);
                     setOpenSections(prev => ({ ...prev, local: true }));
                     break;
             }
@@ -203,24 +187,71 @@ export default function AISettingsPage() {
         console.log(`[AISettingsPage] Updating local API URL to: ${url}`);
         try {
             await aiService.updateLocalApiUrl(url);
+            setLocalModelsUrl(aiService.getLocalModelsUrl());
             console.log(`[AISettingsPage] Local API URL updated, fetching models`);
             // Force refresh by passing true as the second parameter
             const models = await aiService.getAvailableModels('local', true);
             console.log(`[AISettingsPage] Received ${models.length} local models`);
 
-            setOpenaiModels(prev => {
-                const filtered = prev.filter(m => m.provider !== 'local');
-                console.log(`[AISettingsPage] Filtered out ${prev.length - filtered.length} old local models`);
-                const newModels = [...filtered, ...models];
-                console.log(`[AISettingsPage] New models array has ${newModels.length} models`);
-                return newModels;
-            });
+            setLocalModels(models);
             setOpenSections(prev => ({ ...prev, local: true }));
 
             toast.success('Local API URL updated successfully');
         } catch (error) {
             console.error('Error updating local API URL:', error);
             toast.error('Failed to update local API URL');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLocalRuntimeUpdate = async (runtime: LocalAIRuntime) => {
+        setIsLoading(true);
+        setLocalRuntime(runtime);
+        try {
+            await aiService.updateLocalRuntime(runtime);
+            setLocalApiUrl(aiService.getLocalApiUrl());
+            setLocalModelsUrl(aiService.getLocalModelsUrl());
+            setLocalDefaultModelId(aiService.getLocalDefaultModelId() || 'auto');
+            const models = await aiService.getAvailableModels('local', false);
+            setLocalModels(models);
+            setOpenSections(prev => ({ ...prev, local: true }));
+            toast.success(`${LOCAL_RUNTIME_PRESETS[runtime].label} selected`);
+        } catch (error) {
+            console.error('Error updating local runtime:', error);
+            toast.error(`Failed to switch to ${LOCAL_RUNTIME_PRESETS[runtime].label}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLocalDefaultModelUpdate = async (modelId: string) => {
+        setIsLoading(true);
+        setLocalDefaultModelId(modelId);
+        try {
+            await aiService.updateLocalDefaultModelId(modelId === 'auto' ? undefined : modelId);
+            toast.success('Local default model updated');
+        } catch (error) {
+            console.error('Error updating local default model:', error);
+            toast.error('Failed to update local default model');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLocalModelsUrlUpdate = async (url: string) => {
+        if (!url.trim()) return;
+
+        setIsLoading(true);
+        try {
+            await aiService.updateLocalModelsUrl(url);
+            const models = await aiService.getAvailableModels('local', true);
+            setLocalModels(models);
+            setOpenSections(prev => ({ ...prev, local: true }));
+            toast.success('Local models URL updated successfully');
+        } catch (error) {
+            console.error('Error updating local models URL:', error);
+            toast.error('Failed to update local models URL');
         } finally {
             setIsLoading(false);
         }
@@ -627,16 +658,45 @@ export default function AISettingsPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Models from LM Studio</span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleKeyUpdate('local', '')}
-                                    disabled={isLoading}
-                                >
-                                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh Models'}
-                                </Button>
+                            <div className="grid gap-2">
+                                <Label htmlFor="local-runtime">Runtime</Label>
+                                <Select value={localRuntime} onValueChange={(value) => handleLocalRuntimeUpdate(value as LocalAIRuntime)}>
+                                    <SelectTrigger id="local-runtime">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Object.values(LOCAL_RUNTIME_PRESETS).map((preset) => (
+                                            <SelectItem key={preset.runtime} value={preset.runtime}>
+                                                {preset.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                    {LOCAL_RUNTIME_PRESETS[localRuntime].description}
+                                </p>
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="local-default-model">Default Model</Label>
+                                <Select value={localDefaultModelId} onValueChange={handleLocalDefaultModelUpdate}>
+                                    <SelectTrigger id="local-default-model">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="auto">First available model</SelectItem>
+                                        {localModels
+                                            .filter((model) => !isLocalDefaultModel(model))
+                                            .map((model) => (
+                                                <SelectItem key={model.id} value={model.id}>
+                                                    {model.name}
+                                                </SelectItem>
+                                            ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                    Used whenever a prompt selects Local default.
+                                </p>
                             </div>
 
                             <Collapsible
@@ -652,12 +712,12 @@ export default function AISettingsPage() {
                                 </CollapsibleTrigger>
                                 <CollapsibleContent className="mt-2 space-y-2">
                                     <div className="grid gap-2">
-                                        <Label htmlFor="local-api-url">Local API URL</Label>
+                                        <Label htmlFor="local-api-url">Chat API Base URL</Label>
                                         <div className="flex gap-2">
                                             <Input
                                                 id="local-api-url"
                                                 type="text"
-                                                placeholder="http://localhost:1234/v1"
+                                                placeholder={LOCAL_RUNTIME_PRESETS[localRuntime].apiUrl}
                                                 value={localApiUrl}
                                                 onChange={(e) => setLocalApiUrl(e.target.value)}
                                             />
@@ -669,7 +729,28 @@ export default function AISettingsPage() {
                                             </Button>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
-                                            The URL of your local LLM server. Default is http://localhost:1234/v1
+                                            Used for OpenAI-compatible chat completions.
+                                        </p>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="local-models-url">Models URL</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="local-models-url"
+                                                type="text"
+                                                placeholder={LOCAL_RUNTIME_PRESETS[localRuntime].modelsUrl}
+                                                value={localModelsUrl}
+                                                onChange={(e) => setLocalModelsUrl(e.target.value)}
+                                            />
+                                            <Button
+                                                onClick={() => handleLocalModelsUrlUpdate(localModelsUrl)}
+                                                disabled={isLoading || !localModelsUrl.trim()}
+                                            >
+                                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Ollama uses /api/tags; most OpenAI-compatible servers use /v1/models.
                                         </p>
                                     </div>
                                 </CollapsibleContent>
@@ -687,47 +768,16 @@ export default function AISettingsPage() {
                                     Available Models
                                 </CollapsibleTrigger>
                                 <CollapsibleContent className="mt-2 space-y-2">
-                                    {openaiModels
-                                        .filter(m => m.provider === 'local')
-                                        .map(model => (
-                                            <div key={model.id} className="text-sm pl-6">
-                                                {model.name}
-                                            </div>
-                                        ))}
+                                    {localModels.map(model => (
+                                        <div key={model.id} className="text-sm pl-6">
+                                            {model.name}
+                                        </div>
+                                    ))}
                                 </CollapsibleContent>
                                 </Collapsible>
                             </CardContent>
                         </Card>
 
-                    {/* Web Search (Tavily) Section */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Web Search (Tavily)</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="tavily-key">Tavily API Key</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="tavily-key"
-                                        type="password"
-                                        placeholder="Enter your Tavily API key"
-                                        value={tavilyKey}
-                                        onChange={(e) => setTavilyKey(e.target.value)}
-                                    />
-                                    <Button
-                                        onClick={() => handleTavilyKeyUpdate(tavilyKey)}
-                                        disabled={isLoading || !tavilyKey.trim()}
-                                    >
-                                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Enables AI agents to search the web for up-to-date information.
-                                </p>
-                            </div>
-                        </CardContent>
-                    </Card>
                 </div>
             </div>
         </div>
