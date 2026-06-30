@@ -197,7 +197,8 @@ Important variables include:
 - `{{all_entries}}` and category-specific variants like `{{all_characters}}`
 - `{{character Name}}`
 - `{{chapter_outline}}`
-- `{{chapter_data(1)}}`
+- `{{chapter_data(1)}}` — legacy: full chapter plain text by order (not scoped to current story)
+- `{{chapter_data_new(1)}}` — full chapter plain text for chapter order N in the **current** story
 - `{{chat_history}}`
 - `{{user_input}}`
 

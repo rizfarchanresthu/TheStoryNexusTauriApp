@@ -379,6 +379,10 @@ export default function PromptGuide() {
                                             <td className="border p-2">Same as previous_words, but continues into prior chapters even when POV differs (useful after POV switches)</td>
                                         </tr>
                                         <tr>
+                                            <td className="border p-2 font-mono text-sm">&#123;&#123;chapter_data_new(1)&#125;&#125;</td>
+                                            <td className="border p-2">Full plain text of chapter N (by order) in the current story. Use this instead of chapter_data when you need story-scoped chapter content.</td>
+                                        </tr>
+                                        <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;pov&#125;&#125;</td>
                                             <td className="border p-2">The current point of view character and type</td>
                                         </tr>

@@ -110,6 +110,10 @@ export class PromptParser {
                 const resolved = await this.resolveChapterData(args.trim());
                 parsedContent = parsedContent.replace(fullMatch, resolved);
             }
+            if (func === 'chapter_data_new') {
+                const resolved = await this.resolveChapterDataNew(context, args.trim());
+                parsedContent = parsedContent.replace(fullMatch, resolved);
+            }
         }
 
         // Special handling for combined lorebook entries
@@ -823,6 +827,23 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
         const { getChapterPlainTextByChapterOrder } = useChapterStore.getState();
         const data = await getChapterPlainTextByChapterOrder(chapterOrder);
         return data ? data : 'No chapter data is available for this prompt.';
+    }
+
+    private async resolveChapterDataNew(context: PromptContext, args: string): Promise<string> {
+        const fallback = 'No chapter data is available for this prompt.';
+        const chapterOrder = parseInt(args, 10);
+        if (Number.isNaN(chapterOrder)) {
+            return fallback;
+        }
+
+        const chapter = context.chapters?.find(ch => ch.order === chapterOrder);
+        if (!chapter) {
+            return fallback;
+        }
+
+        const { getChapterPlainText } = useChapterStore.getState();
+        const data = await getChapterPlainText(chapter.id);
+        return data ? data : fallback;
     }
 }
 
