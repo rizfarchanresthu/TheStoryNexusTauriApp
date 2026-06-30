@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import systemPrompts from '@/data/systemPrompts';
+import { normalizeLorebookEntry } from '@/features/lorebook/utils/lorebookEntryNormalization';
 import {
     Story,
     Chapter,
@@ -16,7 +17,8 @@ import {
     PipelineExecution,
     MediaAsset,
     MediaBlob,
-    ImageGenerationRecord
+    ImageGenerationRecord,
+    TimelineEvent
 } from '../types/story';
 
 export class StoryDatabase extends Dexie {
@@ -36,6 +38,7 @@ export class StoryDatabase extends Dexie {
     mediaAssets!: Table<MediaAsset>;
     mediaBlobs!: Table<MediaBlob>;
     imageGenerations!: Table<ImageGenerationRecord>;
+    timelineEvents!: Table<TimelineEvent>;
 
     constructor() {
         super('StoryDatabase');
@@ -108,6 +111,52 @@ export class StoryDatabase extends Dexie {
             imageGenerations: 'id, storyId, chapterId, provider, mode, status, createdAt',
         });
 
+        // Version 18: Split lorebook lookup aliases from descriptive tags.
+        this.version(18).stores({
+            stories: 'id, title, createdAt, language, isDemo',
+            chapters: 'id, storyId, order, createdAt, isDemo',
+            aiChats: 'id, storyId, createdAt, isDemo',
+            prompts: 'id, name, promptType, storyId, createdAt, isSystem',
+            templates: 'id, name, templateType, storyId, createdAt, isSystem',
+            aiSettings: 'id, lastModelsFetch',
+            lorebookEntries: 'id, storyId, name, category, *aliases, *tags, isDemo',
+            sceneBeats: 'id, storyId, chapterId',
+            notes: 'id, storyId, title, type, createdAt, updatedAt',
+            agentPresets: 'id, name, role, storyId, createdAt, isSystem',
+            pipelinePresets: 'id, name, storyId, createdAt, isSystem',
+            pipelineExecutions: 'id, storyId, chapterId, pipelinePresetId, createdAt, status',
+            drafts: 'id, storyId, chapterId, createdAt',
+            mediaAssets: 'id, storyId, chapterId, kind, source, storageBackend, createdAt, archivedAt',
+            mediaBlobs: 'assetId, createdAt',
+            imageGenerations: 'id, storyId, chapterId, provider, mode, status, createdAt',
+        }).upgrade(async (tx) => {
+            await tx.table('lorebookEntries').toCollection().modify((entry) => {
+                const normalized = normalizeLorebookEntry(entry);
+                entry.aliases = normalized.aliases;
+                entry.tags = normalized.tags;
+            });
+        });
+
+        this.version(19).stores({
+            stories: 'id, title, createdAt, language, isDemo',
+            chapters: 'id, storyId, order, createdAt, isDemo',
+            aiChats: 'id, storyId, createdAt, isDemo',
+            prompts: 'id, name, promptType, storyId, createdAt, isSystem',
+            templates: 'id, name, templateType, storyId, createdAt, isSystem',
+            aiSettings: 'id, lastModelsFetch',
+            lorebookEntries: 'id, storyId, name, category, *aliases, *tags, isDemo',
+            sceneBeats: 'id, storyId, chapterId',
+            notes: 'id, storyId, title, type, createdAt, updatedAt',
+            agentPresets: 'id, name, role, storyId, createdAt, isSystem',
+            pipelinePresets: 'id, name, storyId, createdAt, isSystem',
+            pipelineExecutions: 'id, storyId, chapterId, pipelinePresetId, createdAt, status',
+            drafts: 'id, storyId, chapterId, createdAt',
+            mediaAssets: 'id, storyId, chapterId, kind, source, storageBackend, createdAt, archivedAt',
+            mediaBlobs: 'assetId, createdAt',
+            imageGenerations: 'id, storyId, chapterId, provider, mode, status, createdAt',
+            timelineEvents: 'id, storyId, chapterId, chapterOrder, eventOrder, createdAt',
+        });
+
         this.on('populate', async () => {
             console.log('Populating database with initial data...');
 
@@ -160,17 +209,27 @@ export class StoryDatabase extends Dexie {
 
     // Add helper method for lorebook entries
     async getLorebookEntriesByStory(storyId: string) {
-        return await this.lorebookEntries
+        const entries = await this.lorebookEntries
             .where('storyId')
             .equals(storyId)
             .toArray();
+        return entries.map(normalizeLorebookEntry);
+    }
+
+    async getLorebookEntriesByAlias(storyId: string, alias: string) {
+        const normalizedAlias = alias.toLowerCase();
+        const entries = await this.getLorebookEntriesByStory(storyId);
+        return entries.filter((entry) =>
+            entry.aliases.some((entryAlias) => entryAlias.toLowerCase() === normalizedAlias)
+        );
     }
 
     async getLorebookEntriesByTag(storyId: string, tag: string) {
-        return await this.lorebookEntries
-            .where(['storyId', 'tags'])
-            .equals([storyId, tag])
-            .toArray();
+        const normalizedTag = tag.toLowerCase();
+        const entries = await this.getLorebookEntriesByStory(storyId);
+        return entries.filter((entry) =>
+            entry.tags.some((entryTag) => entryTag.toLowerCase() === normalizedTag)
+        );
     }
 
     async getLorebookEntriesByCategory(storyId: string, category: LorebookEntry['category']) {
@@ -240,7 +299,7 @@ export class StoryDatabase extends Dexie {
      */
     async deleteStoryWithRelated(storyId: string): Promise<void> {
         return await this.transaction('rw',
-            [this.stories, this.chapters, this.lorebookEntries, this.aiChats, this.sceneBeats, this.drafts, this.mediaAssets, this.mediaBlobs, this.imageGenerations],
+            [this.stories, this.chapters, this.lorebookEntries, this.aiChats, this.sceneBeats, this.drafts, this.mediaAssets, this.mediaBlobs, this.imageGenerations, this.timelineEvents],
             async () => {
                 // Delete all related chapters
                 await this.chapters
@@ -282,6 +341,11 @@ export class StoryDatabase extends Dexie {
                     .equals(storyId)
                     .delete();
                 await this.imageGenerations
+                    .where('storyId')
+                    .equals(storyId)
+                    .delete();
+
+                await this.timelineEvents
                     .where('storyId')
                     .equals(storyId)
                     .delete();

@@ -14,6 +14,12 @@ export function parseLorebookJson(message: string): ParseResult {
     try {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.lorebookEntries)) {
+        return parsed.lorebookEntries;
+      }
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
+        return parsed.entries;
+      }
       return [parsed];
     } catch (err) {
       return null;
@@ -60,7 +66,6 @@ function sanitizeResults(raw: any[]): Partial<LorebookEntry>[] {
     'note',
     'synopsis',
     'starting scenario',
-    'timeline',
   ]);
 
   return raw
@@ -68,7 +73,13 @@ function sanitizeResults(raw: any[]): Partial<LorebookEntry>[] {
     .map((obj) => {
       const name = typeof obj.name === 'string' ? obj.name.trim() : undefined;
       const description = typeof obj.description === 'string' ? obj.description : undefined;
-      const tags = Array.isArray(obj.tags) ? obj.tags.map(String) : undefined;
+      const hasAliases = Array.isArray(obj.aliases);
+      const aliases = hasAliases
+        ? obj.aliases.map(String)
+        : Array.isArray(obj.tags)
+          ? obj.tags.map(String)
+          : undefined;
+      const tags = hasAliases && Array.isArray(obj.tags) ? obj.tags.map(String) : undefined;
       const category = typeof obj.category === 'string' ? obj.category.toLowerCase() : undefined;
       const metadata = obj.metadata && typeof obj.metadata === 'object' ? obj.metadata : undefined;
       const isDisabled = typeof obj.isDisabled === 'boolean' ? obj.isDisabled : undefined;
@@ -76,6 +87,7 @@ function sanitizeResults(raw: any[]): Partial<LorebookEntry>[] {
       const entry: Partial<LorebookEntry> = {};
       if (name) entry.name = name;
       if (description) entry.description = description;
+      if (aliases) entry.aliases = aliases;
       if (tags) entry.tags = tags;
       if (category) entry.category = allowedCategories.has(category) ? (category as any) : category;
       if (metadata) entry.metadata = metadata;

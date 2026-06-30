@@ -65,13 +65,11 @@ System agents and pipelines are seeded by `agentSeeder.ts` when presets load. Cu
 
 | Pipeline | Shape |
 | --- | --- |
-| Quality Prose with Lore Check | Summarizer when long, prose writer, lore judge. |
-| Quality Prose with Revision | Summarizer when long, prose writer, lore judge, conditional revision. |
-| Polished Output | Prose writer, style editor. |
-| Full Quality Pipeline | Summarizer when long, prose writer, lore judge, continuity checker, conditional revision. |
 | Quick Draft | Prose writer only. |
-| Dialogue Polish | Prose writer, dialogue specialist. |
-| Push Prompt Self-Correction | Summarizer when long, prose writer, refusal checker, conditional corrective rewrite. |
+| Polished Draft | Prose writer, style editor. |
+| Checked Polished Draft | Summarizer when long, prose writer, lore judge, continuity checker, style editor. |
+
+System pipelines are intentionally simple and always end with a prose-producing agent. Custom pipelines may end with a judge, checker, or utility agent when the user wants a non-prose result, but the pipeline editor warns before saving that shape.
 
 ## Step Options
 
@@ -105,6 +103,6 @@ Only stream writer-like agents. Keep judge and checker steps silent so the UI do
 
 Prefer story-scoped custom agents when the prompt is specific to one project. Keep broadly useful agents global.
 
-When adding a new role, update `AgentRole`, `DEFAULT_CONTEXT_CONFIG`, `DEFAULT_AGENT_PROMPTS`, agent form labels, list labels/colors, and any seed data that should use the role.
+When adding a new role, update `AgentRole`, `DEFAULT_CONTEXT_CONFIG`, `src/data/agentDefaultPrompts.json`, the matching Markdown files under `src/data/promptMarkdown/agentPrompts`, agent form labels, list labels/colors, and any seed data that should use the role. General Prompt Manager seed metadata lives in `src/data/systemPrompts.json`; long message bodies live under `src/data/promptMarkdown/systemPrompts`.
 
 When adding a new pipeline condition, update the orchestrator condition evaluator and document the condition here.

@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Send, ChevronDown, ChevronUp, X, Plus, Square, Edit, Bot, Activity, Download, RefreshCw, Globe } from "lucide-react";
+import { Loader2, Send, ChevronDown, ChevronUp, X, Plus, Square, Edit, Bot, Activity, Download, RefreshCw, Globe, Save, Pencil } from "lucide-react";
 import { aiService } from "@/services/ai/AIService";
 import { executeTavilySearch } from "@/services/ai/tools";
 import {
@@ -12,15 +12,23 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PromptSelectMenu } from "@/components/ui/prompt-select-menu";
 import { PromptPreviewDialog } from "@/components/ui/prompt-preview-dialog";
+import { PromptForm } from "@/features/prompts/components/PromptForm";
 import { useLorebookStore } from "@/features/lorebook/stores/useLorebookStore";
 import { usePromptStore } from "@/features/prompts/store/promptStore";
 import { useAIStore } from "@/features/ai/stores/useAIStore";
-import { useBrainstormStore } from "../stores/useBrainstormStore";
+import { useBrainstormStore, type BrainstormPinnedSession } from "../stores/useBrainstormStore";
 import { useChapterStore } from "@/features/chapters/stores/useChapterStore";
+import { useNotesStore } from "@/features/notes/stores/useNotesStore";
 import { useAgenticGeneration } from "@/features/agents/hooks/useAgenticGeneration";
 import { db } from "@/services/database";
 import MarkdownRenderer from "./MarkdownRenderer";
@@ -37,6 +45,7 @@ import {
   Chapter,
   PipelinePreset,
   AgentResult,
+  BrainstormOutputMode,
 } from "@/types/story";
 import { createPromptParser } from "@/features/prompts/services/promptParser";
 import {
@@ -50,12 +59,19 @@ import useTemplateStore from '@/features/templates/store/templateStore';
 import CreateTemplateDialog from '@/features/templates/components/CreateTemplateDialog';
 import TemplateManagerDialog from '@/features/templates/components/TemplateManagerDialog';
 import { resolveSavedDefaultModel } from '@/features/ai/utils/defaultModels';
+import {
+  buildBrainstormUserInput,
+  parseBrainstormStructuredOutput,
+  STRUCTURED_OUTPUT_OPTIONS,
+} from "@/features/brainstorm/utils/structuredOutput";
 
 interface ChatInterfaceProps {
   storyId: string;
+  currentChapterId?: string | null;
+  onConfigurePrompts?: () => void;
 }
 
-export default function ChatInterface({ storyId }: ChatInterfaceProps) {
+export default function ChatInterface({ storyId, currentChapterId, onConfigurePrompts }: ChatInterfaceProps) {
   // State for chat
   const [input, setInput] = useState(
     useBrainstormStore.getState().draftMessage
@@ -81,6 +97,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
 
   // State for prompt preview
   const [showPreview, setShowPreview] = useState(false);
+  const [showEditPromptDialog, setShowEditPromptDialog] = useState(false);
   const [previewMessages, setPreviewMessages] = useState<
     PromptMessage[] | undefined
   >(undefined);
@@ -100,9 +117,10 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
   const [showAgenticProgress, setShowAgenticProgress] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
-  // Web search state
-  const [enableWebSearch, setEnableWebSearch] = useState(false);
+  // Web search is temporarily disabled while the integration is repaired.
+  const enableWebSearch = false;
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [structuredOutputMode, setStructuredOutputMode] = useState<BrainstormOutputMode>("normal");
 
   // Get stores
   const { loadEntries, entries: lorebookEntries } = useLorebookStore();
@@ -126,7 +144,13 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
   const setDraftMessage = useBrainstormStore((state) => state.setDraftMessage);
   const clearDraftMessage = useBrainstormStore((state) => state.clearDraftMessage);
   const setMessageEdited = useBrainstormStore((state) => state.setMessageEdited);
-  const { fetchChapters } = useChapterStore();
+  const pinnedChapterId = useBrainstormStore((state) => state.pinnedChapterId);
+  const pinnedSession = useBrainstormStore((state) => state.pinnedSession);
+  const pinToChapter = useBrainstormStore((state) => state.pinToChapter);
+  const updatePinnedSession = useBrainstormStore((state) => state.updatePinnedSession);
+  const clearPinnedSession = useBrainstormStore((state) => state.clearPinnedSession);
+  const { fetchChapters, currentChapter, updateChapterOutline } = useChapterStore();
+  const createNote = useNotesStore((state) => state.createNote);
 
   // Agentic generation hook
   const {
@@ -181,6 +205,8 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
   }, [selectedChat]);
   const [selectedModel, setSelectedModel] = useState<AllowedModel | null>(null);
   const [availableModels, setAvailableModels] = useState<AllowedModel[]>([]);
+  const restoredPinnedChapterRef = useRef<string | null>(null);
+  const skipNextPinnedCaptureRef = useRef(false);
 
   // Get chat messages
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -188,6 +214,40 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
 
   // State for selected lorebook items
   const [selectedItems, setSelectedItems] = useState<LorebookEntry[]>([]);
+
+  const isPinnedToCurrentChapter = !!currentChapterId && pinnedChapterId === currentChapterId;
+
+  const capturePinnedSession = (): BrainstormPinnedSession => {
+    const existingPinnedSession = useBrainstormStore.getState().pinnedSession;
+
+    return {
+      input,
+      selectedPromptId: selectedPrompt?.id,
+      selectedModel,
+      includeFullContext,
+      includeAllLorebook,
+      selectedSummaryIds: selectedSummaries,
+      selectedLorebookEntryIds: selectedItems.map((item) => item.id),
+      selectedChapterContentIds: selectedChapterContent,
+      structuredOutputMode,
+      agenticMode,
+      selectedPipelineId:
+        selectedPipeline?.id ||
+        (existingPinnedSession?.agenticMode ? existingPinnedSession.selectedPipelineId : undefined),
+    };
+  };
+
+  const handlePinToChapterChange = (checked: boolean) => {
+    if (!currentChapterId) return;
+
+    if (checked) {
+      restoredPinnedChapterRef.current = currentChapterId;
+      pinToChapter(currentChapterId, capturePinnedSession());
+    } else {
+      restoredPinnedChapterRef.current = null;
+      clearPinnedSession();
+    }
+  };
 
   // Initialize
   useEffect(() => {
@@ -254,6 +314,14 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!currentChapterId || !pinnedChapterId) return;
+    if (pinnedChapterId !== currentChapterId) {
+      restoredPinnedChapterRef.current = null;
+      clearPinnedSession();
+    }
+  }, [clearPinnedSession, currentChapterId, pinnedChapterId]);
+
   // Load available pipelines when agentic mode is enabled
   useEffect(() => {
     if (agenticMode) {
@@ -271,6 +339,93 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
   }, [agenticMode, getAvailablePipelines, selectedPipeline]);
 
   useEffect(() => {
+    if (!currentChapterId || pinnedChapterId !== currentChapterId || !pinnedSession) return;
+
+    const hasPendingPrompt = !!pinnedSession.selectedPromptId && prompts.length === 0;
+    const summaryIds = pinnedSession.selectedSummaryIds.filter((id) => id !== "all");
+    const hasPendingChapters =
+      (summaryIds.length > 0 || pinnedSession.selectedChapterContentIds.length > 0) &&
+      chapters.length === 0;
+    const hasPendingLorebook =
+      pinnedSession.selectedLorebookEntryIds.length > 0 &&
+      lorebookEntries.length === 0;
+
+    if (hasPendingPrompt || hasPendingChapters || hasPendingLorebook) return;
+
+    const prompt = pinnedSession.selectedPromptId
+      ? prompts.find((item) => item.id === pinnedSession.selectedPromptId) || null
+      : null;
+    const chapterIds = new Set(chapters.map((chapter) => chapter.id));
+    const selectedSummaryIds = pinnedSession.selectedSummaryIds.filter(
+      (id) => id === "all" || chapterIds.has(id)
+    );
+    const selectedChapterContentIds = pinnedSession.selectedChapterContentIds.filter((id) =>
+      chapterIds.has(id)
+    );
+    const lorebookIds = new Set(pinnedSession.selectedLorebookEntryIds);
+    const selectedLorebookEntries = lorebookEntries.filter((entry) => lorebookIds.has(entry.id));
+
+    skipNextPinnedCaptureRef.current = true;
+    setInput(pinnedSession.input);
+    setDraftMessage(pinnedSession.input);
+    setSelectedPrompt(prompt);
+    setSelectedModel(prompt ? pinnedSession.selectedModel || null : null);
+    setIncludeFullContext(pinnedSession.includeFullContext);
+    setIncludeAllLorebook(pinnedSession.includeFullContext ? false : pinnedSession.includeAllLorebook);
+    setSelectedSummaries(pinnedSession.includeFullContext ? [] : selectedSummaryIds);
+    setSelectedChapterContent(pinnedSession.includeFullContext ? [] : selectedChapterContentIds);
+    setSelectedItems(pinnedSession.includeFullContext ? [] : selectedLorebookEntries);
+    setStructuredOutputMode(pinnedSession.structuredOutputMode);
+    setAgenticMode(pinnedSession.agenticMode);
+
+    if (!pinnedSession.agenticMode) {
+      setSelectedPipeline(null);
+    } else if (pinnedSession.selectedPipelineId && availablePipelines.length > 0) {
+      setSelectedPipeline(
+        availablePipelines.find((pipeline) => pipeline.id === pinnedSession.selectedPipelineId) || null
+      );
+    }
+
+    restoredPinnedChapterRef.current = currentChapterId;
+  }, [
+    availablePipelines,
+    chapters,
+    currentChapterId,
+    lorebookEntries,
+    pinnedChapterId,
+    pinnedSession,
+    prompts,
+    setDraftMessage,
+  ]);
+
+  useEffect(() => {
+    if (!currentChapterId || pinnedChapterId !== currentChapterId) return;
+    if (restoredPinnedChapterRef.current !== currentChapterId) return;
+    if (skipNextPinnedCaptureRef.current) {
+      skipNextPinnedCaptureRef.current = false;
+      return;
+    }
+
+    updatePinnedSession(currentChapterId, capturePinnedSession());
+  }, [
+    agenticMode,
+    currentChapterId,
+    includeAllLorebook,
+    includeFullContext,
+    input,
+    pinnedChapterId,
+    selectedChapterContent,
+    selectedItems,
+    selectedModel,
+    selectedPipeline,
+    selectedPrompt,
+    selectedSummaries,
+    structuredOutputMode,
+    updatePinnedSession,
+  ]);
+
+  useEffect(() => {
+    if (isPinnedToCurrentChapter) return;
     if (!settings?.enablePromptDefaults || selectedPrompt || prompts.length === 0) return;
 
     const defaultPrompt = settings.defaultBrainstormPromptId
@@ -281,7 +436,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
 
     setSelectedPrompt(defaultPrompt);
     setSelectedModel(resolveSavedDefaultModel(settings, settings.defaultBrainstormModelId));
-  }, [prompts, selectedPrompt, settings]);
+  }, [isPinnedToCurrentChapter, prompts, selectedPrompt, settings]);
 
   // Get filtered entries based on enabled categories
   const getFilteredEntries = () => {
@@ -342,11 +497,15 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
   };
 
   // Create prompt config for brainstorming
-  const createPromptConfig = (prompt: Prompt): PromptParserConfig => {
+  const createPromptConfig = (
+    prompt: Prompt,
+    userInput = input.trim(),
+    outputMode = structuredOutputMode
+  ): PromptParserConfig => {
     return {
       promptId: prompt.id,
       storyId,
-      scenebeat: input.trim(),
+      scenebeat: buildBrainstormUserInput(userInput, outputMode),
       additionalContext: {
         chatHistory: messages.map((msg) => ({
           role: msg.role,
@@ -361,6 +520,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
           ? []
           : selectedChapterContent,
         enableWebSearch,
+        structuredOutputMode: outputMode,
       },
     };
   };
@@ -414,7 +574,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
   };
 
   // One-click lorebook template insertion
-  const LOREBOOK_TEMPLATE = `Please produce exactly one JSON object (or an array of objects) inside a \`\`\`json\ncode block only. Do NOT include any surrounding explanation or commentary. Each object should include at least a \"name\" field (string). Optional fields: \"description\" (string), \"tags\" (array of strings), \"category\" (one of [\"character\",\"location\",\"item\",\"event\",\"note\",\"synopsis\",\"starting scenario\",\"timeline\"]), \"metadata\" (object), and \"isDisabled\" (boolean).\n\nExample:\n{\n  \"name\": \"Elandra, Crowned Hunter\",\n  \"description\": \"A skilled tracker and ruler of the northern woodlands.\",\n  \"tags\": [\"ranger\", \"royalty\"],\n  \"category\": \"character\",\n  \"metadata\": { \"importance\": \"major\", \"status\": \"active\" }\n}\n\nReturn only the JSON inside the fenced code block.`;
+  const LOREBOOK_TEMPLATE = `Please produce exactly one JSON object (or an array of objects) inside a \`\`\`json\ncode block only. Do NOT include any surrounding explanation or commentary. Each object should include at least a \"name\" field (string). Optional fields: \"description\" (string), \"aliases\" (array of lookup names and phrases), \"tags\" (array of descriptive labels), \"category\" (one of [\"character\",\"location\",\"item\",\"event\",\"note\",\"synopsis\",\"starting scenario\"]), \"metadata\" (object), and \"isDisabled\" (boolean).\n\nExample:\n{\n  \"name\": \"Elandra, Crowned Hunter\",\n  \"description\": \"A skilled tracker and ruler of the northern woodlands.\",\n  \"aliases\": [\"Elandra\", \"Crowned Hunter\"],\n  \"tags\": [\"ranger\", \"royalty\"],\n  \"category\": \"character\",\n  \"metadata\": { \"importance\": \"major\", \"status\": \"active\" }\n}\n\nAliases are lookup names or phrases used to match this entry in prose. Tags are descriptive labels for organization.\n\nReturn only the JSON inside the fenced code block.`;
 
   const insertLorebookTemplate = () => {
     // Append the template to existing input rather than replacing it
@@ -438,6 +598,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
     selectedItems,
     selectedChapterContent,
     input,
+    structuredOutputMode,
   ]);
 
   // Handle submit
@@ -456,6 +617,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
         role: "user",
         content: input.trim(),
         timestamp: new Date(),
+        brainstormOutputMode: structuredOutputMode,
       };
 
       const newMessages = [...messages, userMessage];
@@ -604,6 +766,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
         role: "user",
         content: input.trim(),
         timestamp: new Date(),
+        brainstormOutputMode: structuredOutputMode,
       };
 
       const newMessages = [...messages, userMessage];
@@ -655,7 +818,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
       const result = await generateWithPipeline(
         selectedPipeline.id,
         {
-          scenebeat: input.trim(),
+          scenebeat: buildBrainstormUserInput(input.trim(), structuredOutputMode),
           previousWords,
           matchedEntries,
           allEntries: getFilteredEntries(),
@@ -683,7 +846,10 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
             setStreamingMessageId(null);
             
             // Use the final output from the pipeline
-            const finalContent = pipelineResult.proseOutput || pipelineResult.finalOutput || fullResponse;
+            const finalContent = pipelineResult.displayOutput ||
+              pipelineResult.proseOutput ||
+              pipelineResult.finalOutput ||
+              fullResponse;
             
             // Update the chat with the final message
             await updateChat(chatId, {
@@ -777,6 +943,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
         await useLorebookStore.getState().createEntry({
           ...item,
           storyId,
+          aliases: item.aliases || [],
           tags: item.tags || [],
           description: item.description || '',
           category: (item.category as any) || 'note',
@@ -790,6 +957,76 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
     } catch (err) {
       console.error('Failed to import entries', err);
       toast.error('Failed to create lorebook entries');
+    }
+  };
+
+  const handleSaveOutlineFromMessage = async (messageContent: string) => {
+    const parsed = parseBrainstormStructuredOutput(messageContent);
+    const outline = parsed.chapterOutline;
+
+    if (!outline) {
+      toast.info("No chapter outline JSON found in this message.");
+      return;
+    }
+
+    const targetChapter = currentChapter?.storyId === storyId
+      ? currentChapter
+      : selectedChapterContent.length === 1
+        ? chapters.find((chapter) => chapter.id === selectedChapterContent[0])
+        : undefined;
+
+    if (!targetChapter) {
+      toast.error("Open a chapter or select exactly one chapter content item before saving an outline.");
+      return;
+    }
+
+    try {
+      await updateChapterOutline(targetChapter.id, {
+        content: outline.content,
+        lastUpdated: new Date(),
+      });
+      toast.success(`Saved outline to ${targetChapter.title}.`);
+    } catch (error) {
+      console.error("Failed to save chapter outline", error);
+      toast.error("Failed to save chapter outline.");
+    }
+  };
+
+  const handleSaveDecisionsFromMessage = async (messageContent: string) => {
+    const parsed = parseBrainstormStructuredOutput(messageContent);
+    if (parsed.storyDecisions.length === 0) {
+      toast.info("No story decisions JSON found in this message.");
+      return;
+    }
+
+    try {
+      await createNote(
+        storyId,
+        "Brainstorm Decisions",
+        formatStoryDecisions(parsed.storyDecisions),
+        "idea"
+      );
+    } catch (error) {
+      console.error("Failed to save brainstorm decisions", error);
+    }
+  };
+
+  const handleSaveQuestionsFromMessage = async (messageContent: string) => {
+    const parsed = parseBrainstormStructuredOutput(messageContent);
+    if (parsed.openQuestions.length === 0) {
+      toast.info("No open questions JSON found in this message.");
+      return;
+    }
+
+    try {
+      await createNote(
+        storyId,
+        "Brainstorm Open Questions",
+        formatOpenQuestions(parsed.openQuestions),
+        "idea"
+      );
+    } catch (error) {
+      console.error("Failed to save brainstorm open questions", error);
     }
   };
 
@@ -884,6 +1121,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
       toast.error("No user message to regenerate from");
       return;
     }
+    const regenerateOutputMode = lastUserMsg.brainstormOutputMode ?? "normal";
 
     try {
       setIsGenerating(true);
@@ -893,7 +1131,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
       const config: PromptParserConfig = {
         promptId: selectedPrompt.id,
         storyId,
-        scenebeat: lastUserMsg.content,
+        scenebeat: buildBrainstormUserInput(lastUserMsg.content, regenerateOutputMode),
         additionalContext: {
           chatHistory: messagesBeforeRegen.map((msg) => ({
             role: msg.role,
@@ -907,6 +1145,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
           selectedChapterContent: includeFullContext
             ? []
             : selectedChapterContent,
+          structuredOutputMode: regenerateOutputMode,
         },
       };
 
@@ -982,6 +1221,10 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
       {messages.map((message) => {
         const parsed = parseLorebookJson(message.content || "");
         const hasParsableJson = !parsed.error && parsed.entries && parsed.entries.length > 0;
+        const structuredParsed = parseBrainstormStructuredOutput(message.content || "");
+        const hasChapterOutline = Boolean(structuredParsed.chapterOutline);
+        const hasStoryDecisions = structuredParsed.storyDecisions.length > 0;
+        const hasOpenQuestions = structuredParsed.openQuestions.length > 0;
 
         return (
           <div
@@ -1083,6 +1326,45 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                           Extract
                         </Button>
                       )}
+
+                      {hasChapterOutline && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-primary gap-1"
+                          onClick={() => handleSaveOutlineFromMessage(message.content)}
+                          disabled={streamingMessageId === message.id}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Outline
+                        </Button>
+                      )}
+
+                      {hasStoryDecisions && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-primary gap-1"
+                          onClick={() => handleSaveDecisionsFromMessage(message.content)}
+                          disabled={streamingMessageId === message.id}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Decisions
+                        </Button>
+                      )}
+
+                      {hasOpenQuestions && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-primary gap-1"
+                          onClick={() => handleSaveQuestionsFromMessage(message.content)}
+                          disabled={streamingMessageId === message.id}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Questions
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1163,6 +1445,8 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                   <span className="text-sm">Full Context</span>
                   <div className="relative group">
                     <Switch
+                      aria-label="Include Full Context"
+                      data-testid="brainstorm-full-context"
                       checked={includeFullContext}
                       onCheckedChange={toggleIncludeFullContext}
                       className="data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted-foreground/30"
@@ -1328,7 +1612,6 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                         "note",
                         "synopsis",
                         "starting scenario",
-                        "timeline",
                       ].map((category) => {
                         const categoryItems = getFilteredEntries().filter(
                           (entry) => entry.category === category
@@ -1471,9 +1754,9 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
       <div className="border-t p-4">
         <div className="flex flex-col gap-2">
           {/* Agentic mode toggle and pipeline selector */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-center gap-2 min-h-9">
                 <Bot className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Agentic Mode</span>
                 <Switch
@@ -1482,16 +1765,33 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                   className="data-[state=checked]:bg-primary"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Web Search</span>
-                <Switch
-                  checked={enableWebSearch}
-                  onCheckedChange={setEnableWebSearch}
-                  className="data-[state=checked]:bg-primary"
-                  disabled={agenticMode}
-                />
-              </div>
+              {currentChapterId && (
+                <div className="flex items-center gap-2 min-h-9">
+                  <span className="text-sm font-medium">Pin to Chapter</span>
+                  <Switch
+                    aria-label="Pin to Chapter"
+                    data-testid="brainstorm-pin-to-chapter"
+                    checked={isPinnedToCurrentChapter}
+                    onCheckedChange={handlePinToChapterChange}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+              )}
+              <Select
+                value={structuredOutputMode}
+                onValueChange={(value) => setStructuredOutputMode(value as BrainstormOutputMode)}
+              >
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Output" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRUCTURED_OUTPUT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {agenticMode && availablePipelines.length > 0 && (
                 <Select
                   value={selectedPipeline?.id || ""}
@@ -1500,7 +1800,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                     setSelectedPipeline(pipeline || null);
                   }}
                 >
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-full sm:w-48">
                     <SelectValue placeholder="Select pipeline" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1518,7 +1818,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDiagnostics(!showDiagnostics)}
-                className={cn(showDiagnostics && "bg-muted")}
+                className={cn("w-full sm:w-auto", showDiagnostics && "bg-muted")}
               >
                 <Activity className="h-4 w-4 mr-1" />
                 Diagnostics
@@ -1590,20 +1890,24 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
               }}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-start">
             {!agenticMode && (
-              <PromptSelectMenu
-                isLoading={promptsLoading}
-                error={promptsError}
-                prompts={prompts}
-                promptType="brainstorm"
-                selectedPrompt={selectedPrompt}
-                selectedModel={selectedModel}
-                onSelect={handlePromptSelect}
-              />
+              <div className="min-w-0 sm:w-44">
+                <PromptSelectMenu
+                  isLoading={promptsLoading}
+                  error={promptsError}
+                  prompts={prompts}
+                  promptType="brainstorm"
+                  selectedPrompt={selectedPrompt}
+                  selectedModel={selectedModel}
+                  onSelect={handlePromptSelect}
+                  onConfigurePrompts={onConfigurePrompts}
+                  className="w-full"
+                />
+              </div>
             )}
             {/* Small Select dropdown to insert helper templates */}
-            <div className="ml-2">
+            <div className="min-w-0 sm:w-44">
               <Select
                 onValueChange={(value) => {
                   try {
@@ -1635,7 +1939,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                 }}
                 value=""
               >
-                <SelectTrigger className="w-44" data-template-select="true">
+                <SelectTrigger className="w-full" data-template-select="true">
                   <SelectValue placeholder="Insert..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1691,12 +1995,25 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                   variant="outline"
                   size="sm"
                   onClick={handlePreviewPrompt}
+                  className="w-full sm:w-auto"
                 >
-                  Preview Prompt
+                  <span className="hidden sm:inline">Preview Prompt</span>
+                  <span className="sm:hidden">Preview</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowEditPromptDialog(true)}
+                  title="Edit this prompt"
+                  className="w-full sm:w-auto"
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Edit Prompt</span>
+                  <span className="sm:hidden">Edit</span>
                 </Button>
               </>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-2 sm:ml-auto">
               {isGenerating || isAgenticGenerating ? (
                 <Button
                   variant="destructive"
@@ -1708,7 +2025,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                       abortGeneration();
                     }
                   }}
-                  className="mb-[3px]"
+                  className="w-full mb-[3px] sm:w-auto"
                 >
                   <Square className="h-4 w-4 mr-2" />
                   Stop
@@ -1727,7 +2044,7 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
                       handleSubmit(e);
                     }
                   }}
-                  className="mb-[3px]"
+                  className="w-full mb-[3px] sm:w-auto"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -1745,6 +2062,34 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
         isLoading={previewLoading}
         error={previewError}
       />
+      <Dialog open={showEditPromptDialog} onOpenChange={setShowEditPromptDialog}>
+        <DialogContent
+          className="sm:max-w-[800px] max-h-[85vh] overflow-y-auto"
+          onPointerDownCapture={(event) => event.stopPropagation()}
+          onPointerUpCapture={(event) => event.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle>Edit Prompt: {selectedPrompt?.name}</DialogTitle>
+          </DialogHeader>
+          {selectedPrompt && (
+            <PromptForm
+              prompt={selectedPrompt}
+              onSave={async () => {
+                setShowEditPromptDialog(false);
+                await fetchPrompts();
+                const updatedPrompt = usePromptStore.getState().prompts.find(
+                  (prompt) => prompt.id === selectedPrompt.id
+                );
+                if (updatedPrompt) {
+                  setSelectedPrompt(updatedPrompt);
+                }
+                toast.success("Prompt updated");
+              }}
+              onCancel={() => setShowEditPromptDialog(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
       {/* Create Entry Dialog used when extracting a single parsed entry */}
       <CreateEntryDialog
         open={createDialogOpen}
@@ -1779,4 +2124,26 @@ export default function ChatInterface({ storyId }: ChatInterfaceProps) {
       />
     </div>
   );
+}
+
+function formatStoryDecisions(
+  decisions: Array<{ decision: string; rationale?: string }>
+): string {
+  return decisions
+    .map((item, index) => {
+      const rationale = item.rationale ? `\n   Rationale: ${item.rationale}` : "";
+      return `${index + 1}. ${item.decision}${rationale}`;
+    })
+    .join("\n\n");
+}
+
+function formatOpenQuestions(
+  questions: Array<{ question: string; context?: string }>
+): string {
+  return questions
+    .map((item, index) => {
+      const context = item.context ? `\n   Context: ${item.context}` : "";
+      return `${index + 1}. ${item.question}${context}`;
+    })
+    .join("\n\n");
 }

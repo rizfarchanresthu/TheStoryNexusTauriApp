@@ -21,6 +21,7 @@ import { createPromptParser } from '@/features/prompts/services/promptParser';
 import { sceneBeatService } from '@/features/scenebeats/services/sceneBeatService';
 import { useAgenticGeneration, type AgenticGenerationContext, type AgenticGenerationCallbacks } from '@/features/agents/hooks/useAgenticGeneration';
 import { useParallelGeneration } from '@/features/agents/hooks/useParallelGeneration';
+import { povUsesCharacter } from '@/features/chapters/utils/pov';
 import type {
     Prompt,
     PromptParserConfig,
@@ -45,7 +46,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     const [editor] = useLexicalComposerContext();
     const { generateWithPrompt, generateWithParsedMessages, processStreamedResponse, abortGeneration } = useAIStore();
     const { prompts, fetchPrompts, isLoading: promptsLoading, error: promptsError } = usePromptStore();
-    const { tagMap, chapterMatchedEntries } = useLorebookStore();
+    const { aliasMap, chapterMatchedEntries } = useLorebookStore();
 
     // External generation hooks
     const agenticHook = useAgenticGeneration();
@@ -122,7 +123,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 s.localMatchedEntries ? Array.from(s.localMatchedEntries.values()) : []
             ),
             povType: s.povType,
-            povCharacter: s.povType !== 'Third Person Omniscient' ? s.povCharacter : undefined,
+            povCharacter: povUsesCharacter(s.povType) ? s.povCharacter : undefined,
             sceneBeatContext: {
                 useMatchedChapter: s.useMatchedChapter,
                 useMatchedSceneBeat: s.useMatchedSceneBeat,
@@ -372,7 +373,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 matchedEntries: combinedEntries,
                 allEntries: entries,
                 povType: s.povType,
-                povCharacter: s.povType !== 'Third Person Omniscient' ? s.povCharacter : undefined,
+                povCharacter: povUsesCharacter(s.povType) ? s.povCharacter : undefined,
                 currentChapter,
             };
 
@@ -388,15 +389,23 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 onToken: (token) => store.getState().appendStreamedText(token),
                 onComplete: (pipelineResult) => {
                     console.log('[Agentic] Pipeline complete:', pipelineResult);
-                    store.setState({ streamComplete: true, showAgenticProgress: false });
+                    const output = pipelineResult.displayOutput ||
+                        pipelineResult.proseOutput ||
+                        pipelineResult.finalOutput ||
+                        store.getState().streamedText;
+                    store.setState({
+                        streamedText: output,
+                        streamComplete: true,
+                        showAgenticProgress: false,
+                    });
                     updateNodeSnapshot({
-                        generatedContent: store.getState().streamedText,
+                        generatedContent: output,
                         accepted: false,
                     });
 
                     if (s.sceneBeatId) {
                         sceneBeatService.updateSceneBeat(s.sceneBeatId, {
-                            generatedContent: store.getState().streamedText,
+                            generatedContent: output,
                             accepted: false,
                         }).catch((err: unknown) => console.error('Error saving agentic content:', err));
                     }
@@ -512,7 +521,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
         promptsError,
 
         // Tag map for effects
-        tagMap,
+        aliasMap,
         chapterMatchedEntries,
 
         // External hooks' reactive state
