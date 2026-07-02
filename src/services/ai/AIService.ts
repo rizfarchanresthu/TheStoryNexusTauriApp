@@ -480,6 +480,62 @@ export class AIService {
         });
     }
 
+    async testLocalDefaultModel(): Promise<string> {
+        if (!this.settings) {
+            await this.initialize();
+        }
+        if (!this.settings) throw new Error('AIService not initialized');
+
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+        try {
+            const responsePromise = this.generateWithLocalModel(
+                [{ role: 'user', content: 'Reply with exactly this text: local test ok' }],
+                0,
+                32
+            );
+            timeoutId = setTimeout(() => this.abortStream(), 60000);
+            const response = await responsePromise;
+
+            if (!response.ok) {
+                const detail = await this.readResponseError(response);
+                throw new Error(`Local AI test failed (${response.status}${response.statusText ? ` ${response.statusText}` : ''})${detail ? `: ${detail}` : ''}`);
+            }
+
+            let output = '';
+            await new Promise<void>((resolve, reject) => {
+                this.processStreamedResponse(
+                    response,
+                    (text) => {
+                        output += text;
+                    },
+                    resolve,
+                    reject
+                );
+            });
+
+            const trimmed = output.trim();
+            if (!trimmed) {
+                throw new Error('Local AI test returned an empty response');
+            }
+
+            return trimmed;
+        } finally {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+        }
+    }
+
+    private async readResponseError(response: Response): Promise<string> {
+        try {
+            const text = await response.text();
+            return text.trim().slice(0, 300);
+        } catch {
+            return '';
+        }
+    }
+
     private resolveLocalModelId(modelId?: string): string {
         const runtime = getLocalRuntime(this.settings);
         const runtimeModelId = this.settings?.localModelIdByRuntime?.[runtime];

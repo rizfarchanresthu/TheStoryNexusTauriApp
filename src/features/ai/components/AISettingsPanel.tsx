@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronRight, Loader2, RefreshCw, Upload } from 'lucide-react';
+import { Bot, ChevronRight, Loader2, RefreshCw, Upload } from 'lucide-react';
 import { aiService } from '@/services/ai/AIService';
 import { toast } from 'react-toastify';
 import type { AIModel, LocalAIRuntime } from '@/types/story';
@@ -22,6 +22,7 @@ import { LOCAL_RUNTIME_PRESETS } from '@/services/ai/localRuntime';
 import { isLocalDefaultModel } from '@/features/ai/utils/defaultModels';
 
 type ProviderType = 'openai' | 'openrouter' | 'nanogpt' | 'local' | 'openai_compatible' | 'google';
+type LocalTestResult = { status: 'success' | 'error'; message: string };
 
 export function AISettingsPanel() {
     const [openaiKey, setOpenaiKey] = useState('');
@@ -35,6 +36,8 @@ export function AISettingsPanel() {
     const [localApiUrl, setLocalApiUrl] = useState('http://localhost:1234/v1');
     const [localModelsUrl, setLocalModelsUrl] = useState('http://localhost:1234/v1/models');
     const [localDefaultModelId, setLocalDefaultModelId] = useState('auto');
+    const [isTestingLocal, setIsTestingLocal] = useState(false);
+    const [localTestResult, setLocalTestResult] = useState<LocalTestResult | null>(null);
     const [loadingProvider, setLoadingProvider] = useState<ProviderType | null>(null);
     const [models, setModels] = useState<Record<string, AIModel[]>>({
         openai: [],
@@ -273,6 +276,22 @@ export function AISettingsPanel() {
         }
     };
 
+    const handleTestLocalDefaultModel = async () => {
+        setIsTestingLocal(true);
+        setLocalTestResult(null);
+        try {
+            const response = await aiService.testLocalDefaultModel();
+            setLocalTestResult({ status: 'success', message: response });
+            toast.success('Local AI test succeeded');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Local AI test failed';
+            setLocalTestResult({ status: 'error', message });
+            toast.error(message);
+        } finally {
+            setIsTestingLocal(false);
+        }
+    };
+
     const handleComfyWorkflowFile = async (mode: 'txt2img' | 'img2img', file?: File) => {
         if (!file) return;
 
@@ -390,11 +409,33 @@ export function AISettingsPanel() {
                         size="sm"
                         className="w-full"
                         onClick={() => handleRefresh('local')}
-                        disabled={isLoading('local')}
+                        disabled={isLoading('local') || isTestingLocal}
                     >
                         {isLoading('local') ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
                         Refresh Models
                     </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={handleTestLocalDefaultModel}
+                        disabled={isLoading('local') || isTestingLocal}
+                    >
+                        {isTestingLocal ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Bot className="h-3 w-3 mr-1" />}
+                        Test API
+                    </Button>
+                    {localTestResult && (
+                        <div
+                            className={cn(
+                                "rounded-md border px-3 py-2 text-xs whitespace-pre-wrap break-words",
+                                localTestResult.status === 'success'
+                                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                    : "border-destructive/40 bg-destructive/10 text-destructive"
+                            )}
+                        >
+                            {localTestResult.message}
+                        </div>
+                    )}
                     <ModelList
                         models={models.local}
                         open={openSections.local_models}
