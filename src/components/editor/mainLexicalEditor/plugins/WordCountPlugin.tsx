@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import { $getRoot } from "lexical";
 
 import { countWordsInText } from "../serialization/lexicalToPlainText";

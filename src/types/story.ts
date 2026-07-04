@@ -121,6 +121,11 @@ export interface AllowedModel {
   name: string;
 }
 
+export interface PromptReasoningSettings {
+  enabled: boolean;
+  useReasoning: boolean;
+}
+
 export interface Prompt extends BaseEntity {
   name: string;
   description?: string;
@@ -142,6 +147,7 @@ export interface Prompt extends BaseEntity {
   top_k?: number; // Limit sampling to top k tokens: 50 is default, 0 means disabled
   repetition_penalty?: number; // Penalty for repeating tokens: 1.0 means no penalty, 0 means disabled
   min_p?: number; // Minimum probability for sampling: 0.0 is default, 1.0 means only consider most likely tokens
+  reasoning?: PromptReasoningSettings;
 
   // Multi-model parallel generation
   multiModelEnabled?: boolean; // Optional flag to enable multi-model comparison mode

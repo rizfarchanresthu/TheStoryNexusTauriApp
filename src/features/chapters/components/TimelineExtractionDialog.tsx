@@ -171,7 +171,7 @@ export function TimelineExtractionDialog({
 
             const temperature = selectedPrompt.temperature ?? 0.3;
             const maxTokens = selectedPrompt.maxTokens ?? 2048;
-            const response = await generateWithModel(selectedModel, result.messages, temperature, maxTokens);
+            const response = await generateWithModel(selectedModel, result.messages, temperature, maxTokens, selectedPrompt.reasoning);
 
             if (!response.ok && response.status !== 204) {
                 const errorText = await response.text().catch(() => "");
@@ -381,19 +381,20 @@ async function generateWithModel(
     model: AllowedModel,
     messages: Prompt["messages"],
     temperature: number,
-    maxTokens: number
+    maxTokens: number,
+    reasoning?: Prompt["reasoning"]
 ): Promise<Response> {
     switch (model.provider) {
         case "local":
-            return aiService.generateWithLocalModel(messages, temperature, maxTokens, undefined, undefined, undefined, undefined, model.id);
+            return aiService.generateWithLocalModel(messages, temperature, maxTokens, undefined, undefined, undefined, undefined, model.id, reasoning);
         case "openai":
-            return aiService.generateWithOpenAI(messages, model.id, temperature, maxTokens);
+            return aiService.generateWithOpenAI(messages, model.id, temperature, maxTokens, undefined, undefined, undefined, undefined, undefined, reasoning);
         case "openai_compatible":
-            return aiService.generateWithOpenAICompatible(messages, model.id, temperature, maxTokens);
+            return aiService.generateWithOpenAICompatible(messages, model.id, temperature, maxTokens, undefined, undefined, undefined, undefined, undefined, reasoning);
         case "openrouter":
-            return aiService.generateWithOpenRouter(messages, model.id, temperature, maxTokens);
+            return aiService.generateWithOpenRouter(messages, model.id, temperature, maxTokens, undefined, undefined, undefined, undefined, undefined, reasoning);
         case "nanogpt":
-            return aiService.generateWithNanoGPT(messages, model.id, temperature, maxTokens);
+            return aiService.generateWithNanoGPT(messages, model.id, temperature, maxTokens, undefined, undefined, undefined, undefined, undefined, reasoning);
         case "google":
             return aiService.generateWithGoogle(messages, model.id, temperature, maxTokens);
         default:

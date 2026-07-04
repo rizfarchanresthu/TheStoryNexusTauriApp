@@ -4,7 +4,7 @@ import {
     $isListNode,
     REMOVE_LIST_COMMAND,
 } from "@lexical/list";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import {
     $createHeadingNode,
     $isHeadingNode,

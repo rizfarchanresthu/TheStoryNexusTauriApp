@@ -6,7 +6,7 @@
  * useParallelGeneration for advanced generation modes.
  */
 import { useCallback } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext.js';
 import {
     $createParagraphNode,
     $createTextNode,
@@ -19,6 +19,10 @@ import { useLorebookStore } from '@/features/lorebook/stores/useLorebookStore';
 import { useChapterStore } from '@/features/chapters/stores/useChapterStore';
 import { createPromptParser } from '@/features/prompts/services/promptParser';
 import { sceneBeatService } from '@/features/scenebeats/services/sceneBeatService';
+import {
+    persistAcceptedSceneBeat,
+    persistRejectedSceneBeat,
+} from '@/features/scenebeats/services/sceneBeatGenerationPersistence';
 import { useAgenticGeneration, type AgenticGenerationContext, type AgenticGenerationCallbacks } from '@/features/agents/hooks/useAgenticGeneration';
 import { useParallelGeneration } from '@/features/agents/hooks/useParallelGeneration';
 import { povUsesCharacter } from '@/features/chapters/utils/pov';
@@ -481,7 +485,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
 
         if (sceneBeatId) {
             try {
-                await sceneBeatService.updateSceneBeat(sceneBeatId, { accepted: true });
+                await persistAcceptedSceneBeat(sceneBeatId, streamedText);
             } catch (error) {
                 console.error('Error updating accepted status:', error);
             }
@@ -490,7 +494,15 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
         store.getState().resetGeneration();
     }, [store, editor, updateNodeSnapshot]);
 
-    const handleReject = useCallback(() => {
+    const handleReject = useCallback(async () => {
+        const { sceneBeatId } = store.getState();
+        if (sceneBeatId) {
+            try {
+                await persistRejectedSceneBeat(sceneBeatId);
+            } catch (error) {
+                console.error('Error clearing rejected SceneBeat content:', error);
+            }
+        }
         updateNodeSnapshot({ generatedContent: '', accepted: false });
         store.getState().resetGeneration();
     }, [store, updateNodeSnapshot]);
