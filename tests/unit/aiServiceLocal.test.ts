@@ -111,6 +111,24 @@ describe("AIService.testLocalDefaultModel", () => {
     });
   });
 
+  test("omits temperature when prompt temperature is disabled", async () => {
+    fetchMock.mockResolvedValue(streamResponse("data: [DONE]\n\n"));
+
+    await aiService.generateWithLocalModel(
+      [{ role: "user", content: "Write a line." }],
+      undefined,
+      128,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "local"
+    );
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).not.toHaveProperty("temperature");
+  });
+
   test("sends experimental reasoning controls only when requested", async () => {
     fetchMock.mockResolvedValue(streamResponse("data: [DONE]\n\n"));
 

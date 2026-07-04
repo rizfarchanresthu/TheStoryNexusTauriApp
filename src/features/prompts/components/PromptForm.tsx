@@ -58,7 +58,8 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
         (prompt?.allowedModels || []).map(normalizeAllowedModel)
     );
     const { createPrompt, updatePrompt } = usePromptStore();
-    const [temperature, setTemperature] = useState(prompt?.temperature || 1.0);
+    const [temperatureEnabled, setTemperatureEnabled] = useState(prompt ? prompt.temperature !== undefined : true);
+    const [temperature, setTemperature] = useState(prompt?.temperature ?? 1.0);
     const [maxTokens, setMaxTokens] = useState(prompt?.maxTokens || 2048);
     const [topP, setTopP] = useState(isSystemPrompt ? 0 : (prompt?.top_p !== undefined ? prompt.top_p : 1.0));
     const [topK, setTopK] = useState(isSystemPrompt ? 0 : (prompt?.top_k !== undefined ? prompt.top_k : 50));
@@ -402,7 +403,7 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
                 messages,
                 promptType,
                 allowedModels: isImagePrompt ? [] : selectedModels,
-                temperature,
+                temperature: temperatureEnabled ? temperature : undefined,
                 maxTokens,
                 top_p: topP,
                 top_k: topK,
@@ -889,10 +890,11 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
                                 max={2}
                                 step={0.1}
                                 className="flex-1"
+                                disabled={!temperatureEnabled}
                             />
                             <Input
                                 type="text"
-                                value={temperature.toFixed(1)}
+                                value={temperatureEnabled ? temperature.toFixed(1) : "Disabled"}
                                 onChange={(e) => {
                                     const value = parseFloat(e.target.value);
                                     if (!isNaN(value) && value >= 0 && value <= 2) {
@@ -900,7 +902,16 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
                                     }
                                 }}
                                 className="w-20 text-center"
+                                disabled={!temperatureEnabled}
                             />
+                            <Button
+                                type="button"
+                                variant={temperatureEnabled ? "outline" : "default"}
+                                onClick={() => setTemperatureEnabled((enabled) => !enabled)}
+                                className="whitespace-nowrap"
+                            >
+                                {temperatureEnabled ? "Disable" : "Enable"}
+                            </Button>
                         </div>
                     </div>
                 </div>

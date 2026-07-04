@@ -453,7 +453,7 @@ export class AIService {
 
     async generateWithLocalModel(
         messages: PromptMessage[],
-        temperature: number = 1.0,
+        temperature?: number,
         maxTokens: number = 2048,
         top_p?: number,
         top_k?: number,
@@ -469,11 +469,14 @@ export class AIService {
             messages,
             stream: true,
             model: this.resolveLocalModelId(modelId),
-            temperature,
             max_tokens: maxTokens,
         };
 
         // Only add parameters if they are defined and not 0 (disabled)
+        if (temperature !== undefined) {
+            requestBody.temperature = temperature;
+        }
+
         if (top_p !== undefined && top_p !== 0) {
             requestBody.top_p = top_p;
         }
@@ -715,7 +718,7 @@ export class AIService {
     async generateWithOpenAI(
         messages: PromptMessage[],
         modelId: string,
-        temperature: number = 1.0,
+        temperature?: number,
         maxTokens: number = 2048,
         top_p?: number,
         top_k?: number,
@@ -737,7 +740,6 @@ export class AIService {
         const body: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
             model: modelId,
             messages: messages as any[],
-            temperature: temperature,
             stream: true,
         };
         if (this.usesMaxCompletionTokens(modelId)) {
@@ -747,6 +749,7 @@ export class AIService {
         }
 
         // Add optional parameters if they are defined and not 0
+        if (temperature !== undefined) { body.temperature = temperature; }
         if (top_p !== undefined && top_p !== 0) { body.top_p = top_p; }
         // top_k is not directly supported in the same way by OpenAI's API
         if (repetition_penalty !== undefined && repetition_penalty !== 0) { body.frequency_penalty = repetition_penalty; }
@@ -807,7 +810,7 @@ export class AIService {
     async generateWithOpenRouter(
         messages: PromptMessage[],
         modelId: string,
-        temperature: number = 1.0,
+        temperature?: number,
         maxTokens: number = 2048,
         top_p?: number,
         top_k?: number,
@@ -829,12 +832,12 @@ export class AIService {
         const body: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
             model: modelId,
             messages: messages as any[],
-            temperature: temperature,
             max_tokens: maxTokens,
             stream: true,
         };
 
         // Add optional parameters if they are defined and not 0
+        if (temperature !== undefined) { body.temperature = temperature; }
         if (top_p !== undefined && top_p !== 0) { body.top_p = top_p; }
         if (repetition_penalty !== undefined && repetition_penalty !== 0) { body.frequency_penalty = repetition_penalty; }
         // min_p and top_k are often included in transforms/routing, but we can pass them
@@ -898,7 +901,7 @@ export class AIService {
     async generateWithNanoGPT(
         messages: PromptMessage[],
         modelId: string,
-        temperature: number = 1.0,
+        temperature?: number,
         maxTokens: number = 2048,
         top_p?: number,
         top_k?: number,
@@ -920,12 +923,12 @@ export class AIService {
         const body: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
             model: modelId,
             messages: messages as any[],
-            temperature: temperature,
             max_tokens: maxTokens,
             stream: true,
         };
 
         // Add optional parameters if they are defined and not 0
+        if (temperature !== undefined) { body.temperature = temperature; }
         if (top_p !== undefined && top_p !== 0) { body.top_p = top_p; }
         if (repetition_penalty !== undefined && repetition_penalty !== 0) { body.frequency_penalty = repetition_penalty; }
         if (top_k !== undefined && top_k !== 0) {
@@ -981,7 +984,7 @@ export class AIService {
     async generateWithOpenAICompatible(
         messages: PromptMessage[],
         modelId: string,
-        temperature: number = 1.0,
+        temperature?: number,
         maxTokens: number = 2048,
         top_p?: number,
         top_k?: number,
@@ -1000,11 +1003,11 @@ export class AIService {
         const body: any = {
             model: modelId,
             messages,
-            temperature,
             max_tokens: maxTokens,
             stream: true
         };
 
+        if (temperature !== undefined) { body.temperature = temperature; }
         if (top_p !== undefined && top_p !== 0) { body.top_p = top_p; }
         if (top_k !== undefined && top_k !== 0) { body.top_k = top_k; }
         if (repetition_penalty !== undefined && repetition_penalty !== 0) { body.repetition_penalty = repetition_penalty; }
@@ -1039,7 +1042,7 @@ export class AIService {
     async generateWithGoogle(
         messages: PromptMessage[],
         modelId: string,
-        temperature: number = 1.0,
+        temperature?: number,
         maxTokens: number = 2048,
         top_p?: number,
         top_k?: number,
@@ -1070,10 +1073,12 @@ export class AIService {
 
         // Build generation config
         const config: Record<string, any> = {
-            temperature,
             maxOutputTokens: maxTokens,
         };
 
+        if (temperature !== undefined) {
+            config.temperature = temperature;
+        }
         if (systemInstruction) {
             config.systemInstruction = systemInstruction;
         }

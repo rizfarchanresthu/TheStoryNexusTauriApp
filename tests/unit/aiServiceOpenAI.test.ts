@@ -45,6 +45,17 @@ describe("AIService.generateWithOpenAI", () => {
     expect(createCompletion.mock.calls[0][0]).not.toHaveProperty("max_completion_tokens");
   });
 
+  test("omits temperature when prompt temperature is disabled", async () => {
+    await aiService.generateWithOpenAI(
+      [{ role: "user", content: "Write a line." }],
+      "gpt-4.1-mini",
+      undefined,
+      512
+    );
+
+    expect(createCompletion.mock.calls[0][0]).not.toHaveProperty("temperature");
+  });
+
   test.each(["gpt-5", "gpt-5-mini", "o1", "o3-mini", "o4-mini"])(
     "uses max_completion_tokens for %s",
     async (modelId) => {

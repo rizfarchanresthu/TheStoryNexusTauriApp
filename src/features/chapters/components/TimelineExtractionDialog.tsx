@@ -169,7 +169,7 @@ export function TimelineExtractionDialog({
                 throw new Error(result.error || "Failed to build extraction prompt.");
             }
 
-            const temperature = selectedPrompt.temperature ?? 0.3;
+            const temperature = selectedPrompt.temperature;
             const maxTokens = selectedPrompt.maxTokens ?? 2048;
             const response = await generateWithModel(selectedModel, result.messages, temperature, maxTokens, selectedPrompt.reasoning);
 
@@ -380,7 +380,7 @@ function ExtractModePanel({
 async function generateWithModel(
     model: AllowedModel,
     messages: Prompt["messages"],
-    temperature: number,
+    temperature: number | undefined,
     maxTokens: number,
     reasoning?: Prompt["reasoning"]
 ): Promise<Response> {

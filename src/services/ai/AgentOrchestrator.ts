@@ -1034,6 +1034,8 @@ Provide the improved version:`;
                 return aiService.generateWithOpenAICompatible(messages, model.id, temperature, maxTokens);
             case 'nanogpt':
                 return aiService.generateWithNanoGPT(messages, model.id, temperature, maxTokens);
+            case 'google':
+                return aiService.generateWithGoogle(messages, model.id, temperature, maxTokens);
             default:
                 throw new Error(`Unknown provider: ${model.provider}`);
         }

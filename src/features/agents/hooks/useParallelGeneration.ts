@@ -42,7 +42,7 @@ export function useParallelGeneration(): UseParallelGenerationReturn {
     const generateFromModel = useCallback(async (
         model: AllowedModel,
         messages: PromptMessage[],
-        temperature: number,
+        temperature: number | undefined,
         maxTokens: number,
         index: number,
         abortController: AbortController,
@@ -201,7 +201,7 @@ export function useParallelGeneration(): UseParallelGenerationReturn {
 
             // Get prompt settings
             const prompt = await db.prompts.get(config.promptId);
-            const temperature = prompt?.temperature ?? 0.7;
+            const temperature = prompt?.temperature;
             const maxTokens = prompt?.maxTokens ?? 2048;
             const top_p = prompt?.top_p;
             const top_k = prompt?.top_k;
