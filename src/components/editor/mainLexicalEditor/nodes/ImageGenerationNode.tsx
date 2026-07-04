@@ -11,7 +11,7 @@ import {
   DecoratorNode,
 } from "lexical";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import { ImageIcon, Loader2, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

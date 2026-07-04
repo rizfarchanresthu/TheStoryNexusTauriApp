@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import type { LexicalNode, NodeKey } from "lexical";
 import { Suspense, useCallback, useRef } from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import {
     $applyNodeReplacement,
     $getNodeByKey,

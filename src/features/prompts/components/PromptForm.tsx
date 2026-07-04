@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type WheelEvent } from 'react';
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,7 +10,7 @@ import { useAIStore } from '@/features/ai/stores/useAIStore';
 import { aiService } from '@/services/ai/AIService';
 import { PromptVariableReference } from './PromptVariableReference';
 import type { Prompt, PromptMessage, AIModel, AllowedModel, AIProvider } from '@/types/story';
-import { Plus, ArrowUp, ArrowDown, Trash2, X, Star, Layers, RefreshCw } from 'lucide-react';
+import { Plus, ArrowUp, ArrowDown, Trash2, X, Star, Layers, RefreshCw, AlertTriangle, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -67,7 +68,14 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
     const [minP, setMinP] = useState(
         isSystemPrompt ? 0 : (prompt?.min_p !== undefined ? prompt.min_p : 0.0)
     );
+    const [reasoningParameterEnabled, setReasoningParameterEnabled] = useState(
+        prompt?.reasoning?.enabled ?? false
+    );
+    const [useReasoning, setUseReasoning] = useState(
+        prompt?.reasoning?.useReasoning ?? false
+    );
     const [showProviderLabels, setShowProviderLabels] = useState(true);
+    const [isExperimentalOpen, setIsExperimentalOpen] = useState(false);
     
     // Multi-model comparison state
     const [multiModelEnabled, setMultiModelEnabled] = useState(prompt?.multiModelEnabled || false);
@@ -400,6 +408,10 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
                 top_k: topK,
                 repetition_penalty: repetitionPenalty,
                 min_p: minP,
+                reasoning: isImagePrompt ? { enabled: false, useReasoning: false } : {
+                    enabled: reasoningParameterEnabled,
+                    useReasoning,
+                },
                 multiModelEnabled: isImagePrompt ? false : multiModelEnabled,
                 parallelModels: !isImagePrompt && multiModelEnabled ? parallelModels : [],
             };
@@ -801,6 +813,67 @@ export function PromptForm({ prompt, onSave, onCancel }: PromptFormProps) {
                     </SelectContent>
                 </Select>
             </div>
+
+            {!isImagePrompt && (
+                <div className="border-t border-input pt-6">
+                    <Collapsible open={isExperimentalOpen} onOpenChange={setIsExperimentalOpen}>
+                        <CollapsibleTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="flex w-full items-center justify-between px-0 hover:bg-transparent hover:text-foreground"
+                            >
+                                <span className="font-medium">Experimental</span>
+                                <ChevronDown
+                                    className={`h-4 w-4 text-muted-foreground transition-transform ${isExperimentalOpen ? 'rotate-180' : ''}`}
+                                />
+                            </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-4 space-y-4">
+                            <Alert variant="destructive">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertTitle>Reasoning parameters may break generation</AlertTitle>
+                                <AlertDescription>
+                                    Some providers reject unsupported reasoning fields. Leave this off unless you are testing a model or endpoint that supports reasoning control.
+                                </AlertDescription>
+                            </Alert>
+
+                            <div className="flex items-center justify-between gap-4 rounded-md border border-input p-4">
+                                <div className="space-y-1">
+                                    <Label htmlFor="reasoning-parameter-enabled" className="font-medium cursor-pointer">
+                                        Enable reasoning parameter
+                                    </Label>
+                                    <p className="text-sm text-muted-foreground">
+                                        Send an experimental reasoning setting with this prompt.
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="reasoning-parameter-enabled"
+                                    checked={reasoningParameterEnabled}
+                                    onCheckedChange={setReasoningParameterEnabled}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between gap-4 rounded-md border border-input p-4">
+                                <div className="space-y-1">
+                                    <Label htmlFor="reasoning-use-reasoning" className="font-medium cursor-pointer">
+                                        Reasoning enabled
+                                    </Label>
+                                    <p className="text-sm text-muted-foreground">
+                                        Turn off to request no reasoning; turn on to request normal reasoning.
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="reasoning-use-reasoning"
+                                    checked={useReasoning}
+                                    disabled={!reasoningParameterEnabled}
+                                    onCheckedChange={setUseReasoning}
+                                />
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
+                </div>
+            )}
 
             <div className="border-t border-input pt-6">
                 <h3 className="font-medium mb-4">Prompt Settings</h3>

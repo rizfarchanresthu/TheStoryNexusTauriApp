@@ -5,13 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { Bot, ChevronRight, Loader2 } from "lucide-react";
 import { aiService } from '@/services/ai/AIService';
 import { toast } from 'react-toastify';
 import { AIModel, LocalAIRuntime } from '@/types/story';
 import { cn } from '@/lib/utils';
 import { LOCAL_RUNTIME_PRESETS } from '@/services/ai/localRuntime';
 import { isLocalDefaultModel } from '@/features/ai/utils/defaultModels';
+
+type LocalTestResult = { status: 'success' | 'error'; message: string };
 
 export default function AISettingsPage() {
     const [openaiKey, setOpenaiKey] = useState('');
@@ -25,6 +27,8 @@ export default function AISettingsPage() {
     const [localApiUrl, setLocalApiUrl] = useState('http://localhost:1234/v1');
     const [localModelsUrl, setLocalModelsUrl] = useState('http://localhost:1234/v1/models');
     const [localDefaultModelId, setLocalDefaultModelId] = useState('auto');
+    const [isTestingLocal, setIsTestingLocal] = useState(false);
+    const [localTestResult, setLocalTestResult] = useState<LocalTestResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [localModels, setLocalModels] = useState<AIModel[]>([]);
     const [openaiModels, setOpenaiModels] = useState<AIModel[]>([]);
@@ -254,6 +258,22 @@ export default function AISettingsPage() {
             toast.error('Failed to update local models URL');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleTestLocalDefaultModel = async () => {
+        setIsTestingLocal(true);
+        setLocalTestResult(null);
+        try {
+            const response = await aiService.testLocalDefaultModel();
+            setLocalTestResult({ status: 'success', message: response });
+            toast.success('Local AI test succeeded');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Local AI test failed';
+            setLocalTestResult({ status: 'error', message });
+            toast.error(message);
+        } finally {
+            setIsTestingLocal(false);
         }
     };
 
@@ -651,7 +671,7 @@ export default function AISettingsPage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleRefreshModels('local')}
-                                    disabled={isLoading}
+                                    disabled={isLoading || isTestingLocal}
                                 >
                                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh Models'}
                                 </Button>
@@ -755,6 +775,29 @@ export default function AISettingsPage() {
                                     </div>
                                 </CollapsibleContent>
                             </Collapsible>
+
+                            <div className="grid gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={handleTestLocalDefaultModel}
+                                    disabled={isLoading || isTestingLocal}
+                                >
+                                    {isTestingLocal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                                    Test API
+                                </Button>
+                                {localTestResult && (
+                                    <div
+                                        className={cn(
+                                            "rounded-md border px-3 py-2 text-sm whitespace-pre-wrap break-words",
+                                            localTestResult.status === 'success'
+                                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                                : "border-destructive/40 bg-destructive/10 text-destructive"
+                                        )}
+                                    >
+                                        {localTestResult.message}
+                                    </div>
+                                )}
+                            </div>
 
                             <Collapsible
                                 open={openSections.local}

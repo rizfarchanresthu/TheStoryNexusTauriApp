@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { AllowedModel, PromptMessage, PromptParserConfig } from '@/types/story';
+import { AllowedModel, PromptMessage, PromptParserConfig, PromptReasoningSettings } from '@/types/story';
 import { aiService } from '@/services/ai/AIService';
 import { createPromptParser } from '@/features/prompts/services/promptParser';
 import { db } from '@/services/database';
@@ -49,7 +49,8 @@ export function useParallelGeneration(): UseParallelGenerationReturn {
         top_p?: number,
         top_k?: number,
         repetition_penalty?: number,
-        min_p?: number
+        min_p?: number,
+        reasoning?: PromptReasoningSettings
     ): Promise<void> => {
         // Update status to streaming
         setResponses(prev => {
@@ -64,27 +65,27 @@ export function useParallelGeneration(): UseParallelGenerationReturn {
             switch (model.provider) {
                 case 'local':
                     response = await aiService.generateWithLocalModel(
-                        messages, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p, model.id
+                        messages, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p, model.id, reasoning
                     );
                     break;
                 case 'openai':
                     response = await aiService.generateWithOpenAI(
-                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p
+                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p, undefined, reasoning
                     );
                     break;
                 case 'openai_compatible':
                     response = await aiService.generateWithOpenAICompatible(
-                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p
+                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p, undefined, reasoning
                     );
                     break;
                 case 'openrouter':
                     response = await aiService.generateWithOpenRouter(
-                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p
+                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p, undefined, reasoning
                     );
                     break;
                 case 'nanogpt':
                     response = await aiService.generateWithNanoGPT(
-                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p
+                        messages, model.id, temperature, maxTokens, top_p, top_k, repetition_penalty, min_p, undefined, reasoning
                     );
                     break;
                 default:
@@ -206,6 +207,7 @@ export function useParallelGeneration(): UseParallelGenerationReturn {
             const top_k = prompt?.top_k;
             const repetition_penalty = prompt?.repetition_penalty;
             const min_p = prompt?.min_p;
+            const reasoning = prompt?.reasoning;
 
             // Start all generations in parallel
             const promises = models.map((model, index) => 
@@ -219,7 +221,8 @@ export function useParallelGeneration(): UseParallelGenerationReturn {
                     top_p,
                     top_k,
                     repetition_penalty,
-                    min_p
+                    min_p,
+                    reasoning
                 )
             );
 
