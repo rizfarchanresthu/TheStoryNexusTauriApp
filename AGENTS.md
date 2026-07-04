@@ -11,6 +11,30 @@ These rules apply to all coding work in this repository.
 5. Document important behavior, setup, or testing changes as part of the same task.
 6. Finish with verification: run the smallest useful test set, plus broader tests when the change has wider risk.
 
+## Sandbox Approval Preferences
+
+The user is comfortable with Codex running non-destructive local git inspection commands, including:
+
+- `git status`
+- `git diff`
+- `git log`
+- `git branch`
+- `git rev-parse`
+- `git show`
+
+The user is also comfortable with Codex running routine npm project commands, including:
+
+- `npm.cmd install`
+- `npm.cmd run build`
+- `npm.cmd run test:unit`
+- `npm.cmd run test:e2e:editor`
+- `npm.cmd run test:e2e:llm`
+- `npm.cmd run dev`
+
+If one of these commands fails because of sandbox restrictions, rerun it with escalation and request an appropriate persistent prefix rule when useful.
+
+Do not escalate destructive git commands such as `git reset`, `git checkout`, `git clean`, branch deletion, or file removal unless the user explicitly requests them. Remote/network commands such as `git fetch`, `git pull`, `git push`, package downloads, or dependency installs may still require approval because they contact external services.
+
 ## Testing Expectations
 
 Run enough tests for the risk of the change. Do not leave testing as an afterthought.

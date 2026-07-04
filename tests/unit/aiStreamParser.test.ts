@@ -61,11 +61,12 @@ describe("AIService.processStreamedResponse", () => {
     expect(text).toBe("fallback");
   });
 
-  test("accepts reasoning content from local reasoning model streams", async () => {
+  test("ignores reasoning content from local reasoning model streams", async () => {
     const encoder = new TextEncoder();
     const response = new Response(new ReadableStream({
       start(controller) {
-        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"visible local output"}}]}\n\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"hidden local reasoning"}}]}\n\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"visible local output"}}]}\n\n'));
         controller.close();
       },
     }));

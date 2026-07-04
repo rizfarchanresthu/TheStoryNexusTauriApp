@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import {
     $getRoot,
     $getSelection,

@@ -10,7 +10,7 @@ import {
     KEY_MODIFIER_COMMAND,
     KEY_TAB_COMMAND,
 } from "lexical";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 
 import { $isSceneBeatNode } from "../nodes/SceneBeatNode";
 import { $insertSceneBeatBelowSelection, focusInsertedSceneBeat } from "../nodes/scene-beat/insertSceneBeat";

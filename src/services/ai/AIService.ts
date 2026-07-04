@@ -1,4 +1,4 @@
-import { AIModel, AIProvider, AISettings, LocalAIRuntime, PromptMessage } from '@/types/story';
+import { AIModel, AIProvider, AISettings, LocalAIRuntime, PromptMessage, PromptReasoningSettings } from '@/types/story';
 import { db } from '../database';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
@@ -10,6 +10,7 @@ import {
     getLocalRuntimePreset,
     normalizeLocalModels,
 } from './localRuntime';
+import { createThinkingStreamFilter } from '@/lib/thinking';
 
 export class AIService {
     private static instance: AIService;
@@ -161,6 +162,27 @@ export class AIService {
 
     private usesMaxCompletionTokens(modelId: string): boolean {
         return /^(gpt-5|o1|o3|o4)(?:[-.]|$)/i.test(modelId);
+    }
+
+    private getReasoningEffort(reasoning?: PromptReasoningSettings): 'none' | 'medium' | undefined {
+        if (!reasoning?.enabled) return undefined;
+        return reasoning.useReasoning ? 'medium' : 'none';
+    }
+
+    private applyReasoningConfig(
+        body: Record<string, any>,
+        reasoning?: PromptReasoningSettings,
+        options: { includeReasoningEffort?: boolean; includeReasoningObject?: boolean } = {}
+    ) {
+        const effort = this.getReasoningEffort(reasoning);
+        if (!effort) return;
+
+        if (options.includeReasoningObject !== false) {
+            body.reasoning = { effort };
+        }
+        if (options.includeReasoningEffort) {
+            body.reasoning_effort = effort;
+        }
     }
 
     private initializeGoogle() {
@@ -437,7 +459,8 @@ export class AIService {
         top_k?: number,
         repetition_penalty?: number,
         min_p?: number,
-        modelId?: string
+        modelId?: string,
+        reasoning?: PromptReasoningSettings
     ): Promise<Response> {
         if (!this.settings) throw new Error('AIService not initialized');
 
@@ -466,6 +489,7 @@ export class AIService {
         if (min_p !== undefined && min_p !== 0) {
             requestBody.min_p = min_p;
         }
+        this.applyReasoningConfig(requestBody, reasoning, { includeReasoningEffort: true });
 
         this.abortController = new AbortController();
 
@@ -570,12 +594,17 @@ export class AIService {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        const thinkingFilter = createThinkingStreamFilter();
         let buffer = '';
         let completed = false;
 
         const complete = () => {
             if (!completed) {
                 completed = true;
+                const remainingText = thinkingFilter.flush();
+                if (remainingText) {
+                    onToken(remainingText);
+                }
                 onComplete();
             }
         };
@@ -604,13 +633,15 @@ export class AIService {
                 }
 
                 const choice = json.choices?.[0];
-                const text = choice?.delta?.content ||
-                    choice?.delta?.reasoning_content ||
-                    choice?.message?.content ||
-                    choice?.text ||
+                const text = choice?.delta?.content ??
+                    choice?.message?.content ??
+                    choice?.text ??
                     '';
                 if (text) {
-                    onToken(text);
+                    const visibleText = thinkingFilter.push(text);
+                    if (visibleText) {
+                        onToken(visibleText);
+                    }
                 }
             } catch {
                 // Ignore malformed event payloads. Partial lines are buffered before this point.
@@ -690,7 +721,8 @@ export class AIService {
         top_k?: number,
         repetition_penalty?: number,
         min_p?: number,
-        tools?: any[]
+        tools?: any[],
+        reasoning?: PromptReasoningSettings
     ): Promise<Response> {
         if (!this.settings?.openaiKey) {
             throw new Error('OpenAI API key not set');
@@ -720,6 +752,10 @@ export class AIService {
         if (repetition_penalty !== undefined && repetition_penalty !== 0) { body.frequency_penalty = repetition_penalty; }
         // min_p is not a standard OpenAI parameter
         if (tools?.length) { (body as any).tools = tools; }
+        this.applyReasoningConfig(body as Record<string, any>, reasoning, {
+            includeReasoningObject: false,
+            includeReasoningEffort: true,
+        });
 
         this.abortController = new AbortController();
 
@@ -777,7 +813,8 @@ export class AIService {
         top_k?: number,
         repetition_penalty?: number,
         min_p?: number,
-        tools?: any[]
+        tools?: any[],
+        reasoning?: PromptReasoningSettings
     ): Promise<Response> {
         if (!this.settings?.openrouterKey) {
             throw new Error('OpenRouter API key not set');
@@ -809,6 +846,7 @@ export class AIService {
             Object.assign(body, { min_p });
         }
         if (tools?.length) { (body as any).tools = tools; }
+        this.applyReasoningConfig(body as Record<string, any>, reasoning);
 
         this.abortController = new AbortController();
 
@@ -866,7 +904,8 @@ export class AIService {
         top_k?: number,
         repetition_penalty?: number,
         min_p?: number,
-        tools?: any[]
+        tools?: any[],
+        reasoning?: PromptReasoningSettings
     ): Promise<Response> {
         if (!this.settings?.nanogptKey) {
             throw new Error('NanoGPT API key not set');
@@ -896,6 +935,7 @@ export class AIService {
             Object.assign(body, { min_p });
         }
         if (tools?.length) { (body as any).tools = tools; }
+        this.applyReasoningConfig(body as Record<string, any>, reasoning);
 
         this.abortController = new AbortController();
 
@@ -947,7 +987,8 @@ export class AIService {
         top_k?: number,
         repetition_penalty?: number,
         min_p?: number,
-        tools?: any[]
+        tools?: any[],
+        reasoning?: PromptReasoningSettings
     ): Promise<Response> {
         if (!this.settings?.openaiCompatibleKey || !this.settings?.openaiCompatibleUrl) {
             throw new Error('OpenAI-compatible provider not configured');
@@ -969,6 +1010,7 @@ export class AIService {
         if (repetition_penalty !== undefined && repetition_penalty !== 0) { body.repetition_penalty = repetition_penalty; }
         if (min_p !== undefined && min_p !== 0) { body.min_p = min_p; }
         if (tools?.length) { body.tools = tools; }
+        this.applyReasoningConfig(body, reasoning, { includeReasoningEffort: true });
 
         this.abortController = new AbortController();
 
@@ -1237,6 +1279,23 @@ export class AIService {
     }
 
     getSettings(): AISettings | null {
+        return this.settings;
+    }
+
+    async refreshSettingsFromDatabase(): Promise<AISettings | null> {
+        const settings = await db.aiSettings.toArray();
+        const nextSettings = this.selectSettings(settings);
+        if (!nextSettings) {
+            this.settings = null;
+            return null;
+        }
+
+        this.settings = nextSettings;
+        this.initializeOpenAI();
+        this.initializeOpenRouter();
+        this.initializeNanoGPT();
+        this.initializeOpenAICompatible();
+        this.initializeGoogle();
         return this.settings;
     }
 

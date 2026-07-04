@@ -31,7 +31,7 @@ interface SceneBeatActionBarProps {
     onAbortAgentic: () => void;
     onParallelGenerate: () => Promise<void>;
     onAccept: () => Promise<void>;
-    onReject: () => void;
+    onReject: () => Promise<void>;
     onRegenerate: (msg: string) => Promise<void>;
 }
 
