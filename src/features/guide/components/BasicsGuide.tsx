@@ -103,8 +103,17 @@ export default function BasicsGuide() {
                             <p>
                                 Scene Beats are inline instructions for AI prose generation. Insert one in the editor, describe what should happen, choose a prompt/model or agentic pipeline, and generate.
                             </p>
+                            <div className="rounded-md border bg-muted/30 p-4">
+                                <h5 className="mb-2 font-medium">How to insert one</h5>
+                                <ul className="ml-4 list-disc space-y-2 text-sm text-muted-foreground">
+                                    <li>Place your cursor where the generated prose should be anchored.</li>
+                                    <li>Open the editor toolbar's <strong>Insert</strong> menu and choose <strong>Scene Beat</strong>.</li>
+                                    <li>Or type <span className="font-mono text-foreground">/</span> in the editor, choose <strong>Scene Beat</strong> from the command menu, and press Enter.</li>
+                                    <li>You can also use <span className="font-mono text-foreground">Alt+S</span> while focused in the editor.</li>
+                                </ul>
+                            </div>
                             <ol className="ml-4 list-decimal space-y-2 text-sm text-muted-foreground">
-                                <li>Add a Scene Beat in the editor.</li>
+                                <li>Add a Scene Beat using the toolbar, slash command, or keyboard shortcut.</li>
                                 <li>Write a specific instruction, such as a character reaction, conflict beat, or transition.</li>
                                 <li>Choose normal generation, multi-model comparison, or Agentic Mode.</li>
                                 <li>Accept the generated prose when it fits, or reject and revise the instruction.</li>

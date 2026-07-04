@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import { debounce } from "lodash";
 import { CLEAR_HISTORY_COMMAND } from "lexical";
 

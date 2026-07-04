@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { ContentEditable } from "@lexical/react/LexicalContentEditable";
-import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { ListPlugin } from "@lexical/react/LexicalListPlugin";
-import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin.js";
+import { LexicalComposer } from "@lexical/react/LexicalComposer.js";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable.js";
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary.js";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin.js";
+import { ListPlugin } from "@lexical/react/LexicalListPlugin.js";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin.js";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import { useChapterStore } from "@/features/chapters/stores/useChapterStore";

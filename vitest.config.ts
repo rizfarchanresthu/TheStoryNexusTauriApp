@@ -6,8 +6,6 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       shared: path.resolve(__dirname, "src/Lexical/shared/src"),
-      lexical: path.resolve(__dirname, "node_modules/lexical"),
-      "@lexical/react": path.resolve(__dirname, "node_modules/@lexical/react"),
     },
   },
   test: {

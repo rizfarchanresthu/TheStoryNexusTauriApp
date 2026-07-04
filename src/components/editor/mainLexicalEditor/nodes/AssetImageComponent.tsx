@@ -1,8 +1,8 @@
 import type { NodeKey } from "lexical";
 import type { JSX } from "react";
 import { useEffect, useRef, useState } from "react";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
+import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection.js";
 import { mergeRegister } from "@lexical/utils";
 import {
   $getNodeByKey,
