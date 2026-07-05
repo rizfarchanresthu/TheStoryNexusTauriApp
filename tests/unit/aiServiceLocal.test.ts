@@ -73,7 +73,9 @@ describe("AIService.testLocalDefaultModel", () => {
       model: "gemma-3",
       stream: true,
       temperature: 0,
-      max_tokens: 32,
+      max_tokens: 4096,
+      reasoning: { effort: "none" },
+      reasoning_effort: "none",
       messages: [
         { role: "user", content: "Reply with exactly this text: local test ok" },
       ],

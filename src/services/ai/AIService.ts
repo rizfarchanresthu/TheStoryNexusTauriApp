@@ -519,7 +519,13 @@ export class AIService {
             const responsePromise = this.generateWithLocalModel(
                 [{ role: 'user', content: 'Reply with exactly this text: local test ok' }],
                 0,
-                32
+                4096,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                { enabled: true, useReasoning: false }
             );
             timeoutId = setTimeout(() => this.abortStream(), 60000);
             const response = await responsePromise;
