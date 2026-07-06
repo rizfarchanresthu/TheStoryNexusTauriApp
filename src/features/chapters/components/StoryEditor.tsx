@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { BookOpen, Maximize, Minimize, User, StickyNote, MoreVertical, FileText, Settings, HelpCircle, ScrollText, Book, Settings2, Clock, MessageSquarePlus, Bot, ImageIcon, Wrench, Palette, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MainLexicalEditor } from "@/components/editor/mainLexicalEditor";
@@ -45,6 +45,8 @@ import { ImageGalleryPanel } from "@/features/images/components/ImageGalleryPane
 import { MiscSettingsPanel } from "@/features/settings/components/MiscSettingsPanel";
 import { ThemeSettingsPanel } from "@/features/theme/components/ThemeSettingsPanel";
 import { addOpenPromptsPanelListener } from "@/features/prompts/utils/openPromptsPanel";
+import { useStoryStore } from "@/features/stories/stores/useStoryStore";
+import { assetReference, resolveAssetDisplayUrl } from "@/features/images/services/assetStorage";
 
 type ToolPanelType = "chapterOutline" | "chapterPOV" | "chapterNotes" | "drafts" | "aiSettings" | "guide" | "prompts" | "lorebook" | "timeline" | "agents" | "promptDefaults" | "simpleWriteSettings" | "brainstorm" | "imageGallery" | "themeSettings" | "miscSettings" | null;
 
@@ -69,7 +71,42 @@ export function StoryEditor({ onSiteDataChanged }: StoryEditorProps) {
     const editorRootRef = useRef<HTMLDivElement | null>(null);
     const openPromptsTimeoutRef = useRef<number | undefined>(undefined);
     const { currentChapterId, currentStoryId } = useStoryContext();
+    const currentStory = useStoryStore((state) => state.currentStory);
+    const [editorBackgroundUrl, setEditorBackgroundUrl] = useState("");
     const isMobile = useIsMobile();
+
+    const editorBackground = currentStory?.editorBackground;
+    const hasEnabledEditorBackground = !!editorBackground?.assetId && editorBackground.enabled !== false;
+
+    useEffect(() => {
+        if (!hasEnabledEditorBackground || !editorBackground?.assetId) {
+            setEditorBackgroundUrl("");
+            return;
+        }
+
+        let cancelled = false;
+        resolveAssetDisplayUrl(assetReference(editorBackground.assetId))
+            .then((url) => {
+                if (!cancelled) setEditorBackgroundUrl(url);
+            })
+            .catch(() => {
+                if (!cancelled) setEditorBackgroundUrl("");
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [editorBackground?.assetId, hasEnabledEditorBackground]);
+
+    const editorBackgroundStyle = editorBackgroundUrl
+        ? ({
+            "--sn-editor-bg-image": `url("${editorBackgroundUrl.replace(/"/g, '\\"')}")`,
+            "--sn-editor-bg-overlay-opacity": String(editorBackground?.dim ?? 0.62),
+            "--sn-editor-bg-size": editorBackground?.fit === "contain-repeat" ? "contain" : editorBackground?.fit ?? "cover",
+            "--sn-editor-bg-repeat": editorBackground?.fit === "contain-repeat" ? "repeat" : "no-repeat",
+            "--sn-editor-bg-position": editorBackground?.position ?? "center",
+        } as CSSProperties)
+        : undefined;
 
     const openPromptsPanelFromCurrentPanel = useCallback(() => {
         if (!editorRootRef.current?.getClientRects().length) return;
@@ -307,7 +344,10 @@ export function StoryEditor({ onSiteDataChanged }: StoryEditorProps) {
     return (
         <div ref={editorRootRef} className="flex min-h-screen bg-background">
             {/* Main Editor Area */}
-            <div className={`flex-1 flex justify-center min-w-0 ${isMaximized ? '' : 'px-2 md:px-6'}`}>
+            <div
+                className={`sn-story-editor-main-area flex-1 flex justify-center min-w-0 ${isMaximized ? '' : 'px-2 md:px-6'}`}
+                style={editorBackgroundStyle}
+            >
                 <div className={`min-w-0 ${isMaximized ? 'w-full' : 'max-w-[1200px] w-full'}`}>
                     <MainLexicalEditor maximizeButton={maximizeButton} />
                 </div>

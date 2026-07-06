@@ -13,12 +13,24 @@ export type PovType =
   | "Third Person Omniscient"
   | "Third Person (Objective)";
 
+export type EditorBackgroundFit = "cover" | "contain" | "contain-repeat";
+export type EditorBackgroundPosition = "center" | "top" | "bottom";
+
+export interface EditorBackgroundSettings {
+  assetId?: string;
+  enabled: boolean;
+  dim: number;
+  fit: EditorBackgroundFit;
+  position: EditorBackgroundPosition;
+}
+
 // Core story type
 export interface Story extends BaseEntity {
   title: string;
   author: string;
   language: string;
   synopsis?: string;
+  editorBackground?: EditorBackgroundSettings;
 }
 
 // Chapter structure
