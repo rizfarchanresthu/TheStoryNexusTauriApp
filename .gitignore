@@ -34,6 +34,7 @@ dist-ssr
 
 # Doc files
 src-tauri/gen/
+docs/APP_FEATURE_DEEP_DIVE.md
 
 # Playwright
 /test-results/
