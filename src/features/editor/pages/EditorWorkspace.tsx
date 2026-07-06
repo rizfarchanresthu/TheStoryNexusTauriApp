@@ -79,6 +79,8 @@ import { db } from "@/services/database";
 import { dbSeeder } from "@/services/dbSeed";
 import { storyExportService } from "@/services/storyExportService";
 import { siteBackupService } from "@/services/siteBackupService";
+import { StartupWizard } from "@/features/onboarding/components/StartupWizard";
+import { completeOnboarding, hasCompletedOnboarding } from "@/features/onboarding/onboardingStorage";
 import type { AllowedModel, Chapter, PovType, Prompt, PromptParserConfig, Story } from "@/types/story";
 import { cn } from "@/lib/utils";
 import {
@@ -111,10 +113,11 @@ export default function EditorWorkspace() {
     const [summaryBeforeGeneration, setSummaryBeforeGeneration] = useState("");
     const [hasGeneratedSummary, setHasGeneratedSummary] = useState(false);
     const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+    const [startupWizardOpen, setStartupWizardOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const siteBackupInputRef = useRef<HTMLInputElement>(null);
 
-    const { stories, fetchStories, getStory, currentStory, deleteStory, setCurrentStory } = useStoryStore();
+    const { stories, fetchStories, getStory, currentStory, createStory, deleteStory, setCurrentStory } = useStoryStore();
     const {
         chapters,
         currentChapter,
@@ -248,6 +251,11 @@ export default function EditorWorkspace() {
         };
     }, [activateStory, clearEditorSelection, fetchPrompts, fetchStories]);
 
+    useEffect(() => {
+        if (!isReady || stories.length > 0 || hasCompletedOnboarding()) return;
+        setStartupWizardOpen(true);
+    }, [isReady, stories.length]);
+
     const handleStorySelect = async (storyId: string) => {
         await activateStory(storyId);
         setLeftSheetOpen(false);
@@ -256,6 +264,38 @@ export default function EditorWorkspace() {
     const handleCreatedStory = async (storyId: string) => {
         await fetchStories();
         await activateStory(storyId, null);
+    };
+
+    const handleCreateStarterStory = async ({
+        title,
+        author,
+        language,
+        synopsis,
+        chapterTitle,
+    }: {
+        title: string;
+        author: string;
+        language: string;
+        synopsis: string;
+        chapterTitle: string;
+    }) => {
+        const storyId = await createStory({
+            title,
+            author,
+            language,
+            synopsis,
+        });
+        const chapterId = await createChapter({
+            storyId,
+            title: chapterTitle,
+            content: "",
+            povType: "Third Person Omniscient",
+            order: 1,
+            outline: { content: "", lastUpdated: new Date() },
+        });
+        await fetchStories();
+        await fetchChapters(storyId);
+        await activateStory(storyId, chapterId);
     };
 
     const handleImportStory = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -562,7 +602,10 @@ export default function EditorWorkspace() {
                 {leftRail}
                 <main className="min-w-0">
                     {currentStoryId && currentChapterId ? (
-                        <StoryEditor onSiteDataChanged={handleSiteDataChanged} />
+                        <StoryEditor
+                            onSiteDataChanged={handleSiteDataChanged}
+                            onOpenStartupWizard={() => setStartupWizardOpen(true)}
+                        />
                     ) : (
                         <EditorEmptyState
                             hasStories={stories.length > 0}
@@ -597,7 +640,10 @@ export default function EditorWorkspace() {
                 </div>
                 <main className="flex-1">
                     {currentStoryId && currentChapterId ? (
-                        <StoryEditor onSiteDataChanged={handleSiteDataChanged} />
+                        <StoryEditor
+                            onSiteDataChanged={handleSiteDataChanged}
+                            onOpenStartupWizard={() => setStartupWizardOpen(true)}
+                        />
                     ) : (
                         <EditorEmptyState
                             hasStories={stories.length > 0}
@@ -670,6 +716,17 @@ export default function EditorWorkspace() {
                 onGenerate={handleGenerateSummary}
                 onAcceptGenerated={handleAcceptGeneratedSummary}
                 onRejectGenerated={handleRejectGeneratedSummary}
+            />
+
+            <StartupWizard
+                open={startupWizardOpen}
+                hasStories={stories.length > 0}
+                onOpenChange={setStartupWizardOpen}
+                onCreateStarterStory={handleCreateStarterStory}
+                onComplete={() => {
+                    completeOnboarding();
+                    setStartupWizardOpen(false);
+                }}
             />
         </div>
     );

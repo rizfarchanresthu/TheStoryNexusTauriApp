@@ -52,6 +52,7 @@ type ToolPanelType = "chapterOutline" | "chapterPOV" | "chapterNotes" | "drafts"
 
 interface StoryEditorProps {
     onSiteDataChanged?: (preferredStoryId?: string | null) => Promise<void> | void;
+    onOpenStartupWizard?: () => void;
 }
 
 function ToolSectionLabel({ children }: { children: string }) {
@@ -62,7 +63,7 @@ function ToolSectionLabel({ children }: { children: string }) {
     );
 }
 
-export function StoryEditor({ onSiteDataChanged }: StoryEditorProps) {
+export function StoryEditor({ onSiteDataChanged, onOpenStartupWizard }: StoryEditorProps) {
     const [openPanel, setOpenPanel] = useState<ToolPanelType>(null);
     const [isMaximized, setIsMaximized] = useState(false);
     const [isBrainstormExpanded, setIsBrainstormExpanded] = useState(false);
@@ -132,6 +133,11 @@ export function StoryEditor({ onSiteDataChanged }: StoryEditorProps) {
     const handleOpenPanel = (panel: ToolPanelType) => {
         setOpenPanel(panel === openPanel ? null : panel);
     };
+
+    const handleOpenStartupWizard = useCallback(() => {
+        setOpenPanel(null);
+        window.setTimeout(() => onOpenStartupWizard?.(), 100);
+    }, [onOpenStartupWizard]);
 
     const toggleMaximize = () => {
         setIsMaximized(!isMaximized);
@@ -582,7 +588,9 @@ export function StoryEditor({ onSiteDataChanged }: StoryEditorProps) {
                                     <TabsTrigger value="brainstorm" className="text-xs">Brainstorm</TabsTrigger>
                                 </TabsList>
                             </div>
-                            <TabsContent value="basics"><BasicsGuide /></TabsContent>
+                            <TabsContent value="basics">
+                                <BasicsGuide onOpenStartupWizard={handleOpenStartupWizard} />
+                            </TabsContent>
                             <TabsContent value="simple-write"><SimpleWriteGuide /></TabsContent>
                             <TabsContent value="lorebook"><LorebookGuide /></TabsContent>
                             <TabsContent value="timeline"><TimelineGuide /></TabsContent>

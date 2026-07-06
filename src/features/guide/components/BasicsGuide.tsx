@@ -9,8 +9,9 @@ import {
     Settings,
     Sparkles,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export default function BasicsGuide() {
+export default function BasicsGuide({ onOpenStartupWizard }: { onOpenStartupWizard?: () => void }) {
     return (
         <div className="space-y-8">
             <div>
@@ -18,6 +19,12 @@ export default function BasicsGuide() {
                 <p className="mb-6 text-muted-foreground">
                     The Story Nexus is now centered on one writing workspace. Choose a story and chapter from the left rail, write in the editor, and open supporting tools from the right rail when you need them.
                 </p>
+                {onOpenStartupWizard && (
+                    <Button type="button" variant="outline" onClick={onOpenStartupWizard}>
+                        <Bot className="mr-2 h-4 w-4" />
+                        Open Startup Wizard
+                    </Button>
+                )}
             </div>
 
             <div className="space-y-6">
