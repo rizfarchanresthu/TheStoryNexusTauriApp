@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { ThemeProvider } from "./lib/theme-provider";
 import { ToastContainer } from "react-toastify";
 import { StoryProvider } from "@/features/stories/context/StoryContext";
+import { StartupUpdateNotifier } from "@/features/settings/components/StartupUpdateNotifier";
 // Styles
 import "./index.css";
 import "react-toastify/dist/ReactToastify.css";
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </Routes>
         </StoryProvider>
         <ToastContainer position="bottom-right" autoClose={1000} />
+        <StartupUpdateNotifier />
       </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>
