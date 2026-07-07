@@ -139,6 +139,18 @@ make -f Makefile updater-json MSI_URL=https://github.com/vijayk1989/TheStoryNexu
 
 Upload `dist/updater/latest.json` to the same GitHub Release. Existing apps check that JSON to discover the latest update.
 
+To create a full GitHub release locally with the GitHub CLI, first run `gh auth login`, then:
+
+```sh
+make -f Makefile release VERSION=1.2.8
+```
+
+Preview the commands and user-facing release body without building, tagging, pushing, or creating a release:
+
+```sh
+make -f Makefile release-dry-run VERSION=1.2.8
+```
+
 The Makefile uses `npm.cmd` by default because it is the most reliable npm shim for Windows automation. If `npm` works in your shell, you can override it:
 
 ```sh
