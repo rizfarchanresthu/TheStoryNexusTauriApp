@@ -466,6 +466,14 @@ export default function PromptGuide() {
                                             <td className="border p-2">All starting scenario entries from the Lorebook</td>
                                         </tr>
                                         <tr>
+                                            <td className="border p-2 font-mono text-sm">&#123;&#123;all_magic_systems&#125;&#125;</td>
+                                            <td className="border p-2">All magic system entries from the Lorebook</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="border p-2 font-mono text-sm">&#123;&#123;all_world_rules&#125;&#125;</td>
+                                            <td className="border p-2">All world rule entries from the Lorebook</td>
+                                        </tr>
+                                        <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;character Alias&#125;&#125;</td>
                                             <td className="border p-2">A specific character entry by name or alias</td>
                                         </tr>

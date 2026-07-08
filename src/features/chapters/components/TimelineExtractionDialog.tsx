@@ -15,7 +15,7 @@ import { toast } from "react-toastify";
 import { Loader2, Play, Save, Sparkles, X } from "lucide-react";
 
 import { PromptSelectMenu } from "@/components/ui/prompt-select-menu";
-import type { AllowedModel, LorebookEntry, Prompt } from "@/types/story";
+import { LOREBOOK_CATEGORIES, type AllowedModel, type LorebookEntry, type Prompt } from "@/types/story";
 import { usePromptStore } from "@/features/prompts/store/promptStore";
 import { useAIStore } from "@/features/ai/stores/useAIStore";
 import { useChapterStore } from "@/features/chapters/stores/useChapterStore";
@@ -453,17 +453,7 @@ async function saveStyleEntry(storyId: string, chapterId: string, output: string
 }
 
 function normalizeLorebookCategory(category: Partial<LorebookEntry>["category"]): LorebookEntry["category"] {
-    const allowedCategories: LorebookEntry["category"][] = [
-        "character",
-        "location",
-        "item",
-        "event",
-        "note",
-        "synopsis",
-        "starting scenario",
-    ];
-
-    return category && allowedCategories.includes(category) ? category : "note";
+    return category && LOREBOOK_CATEGORIES.includes(category) ? category : "note";
 }
 
 type LorebookUpdateProposal = {

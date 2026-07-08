@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { createPromptParser } from "@/features/prompts/services/promptParser";
+import { useLorebookStore } from "@/features/lorebook/stores/useLorebookStore";
 import { db } from "@/services/database";
 import type { LorebookEntry, Prompt } from "@/types/story";
 import { resetTestDb } from "./testDb";
@@ -8,6 +9,15 @@ import { resetTestDb } from "./testDb";
 describe("PromptParser", () => {
   beforeEach(async () => {
     await resetTestDb();
+    useLorebookStore.setState({
+      entries: [],
+      isLoading: false,
+      error: null,
+      aliasMap: {},
+      editorContent: "",
+      matchedEntries: new Map(),
+      chapterMatchedEntries: new Map(),
+    });
   });
 
   test("resolves after_words with a word limit from the start of afterWords", async () => {
@@ -133,6 +143,35 @@ describe("PromptParser", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.messages[0].content).toContain("LOCATION: The Towering Statue");
+  });
+
+  test("resolves magic system and world rule lorebook variables", async () => {
+    await addPrompt("Magic:\n{{all_magic_systems}}\nRules:\n{{all_world_rules}}");
+    useLorebookStore.setState({
+      entries: [
+        lorebookEntry({
+          id: "magic-1",
+          name: "Wand Magic",
+          category: "magic system",
+          description: "Spellcasting requires a wand and clear intent.",
+        }),
+        lorebookEntry({
+          id: "rule-1",
+          name: "Statute of Secrecy",
+          category: "world rule",
+          description: "Magical society must remain hidden.",
+        }),
+      ],
+    });
+
+    const result = await createPromptParser().parse({
+      promptId: "unit-prompt",
+      storyId: "story-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.messages[0].content).toContain("MAGIC SYSTEM: Wand Magic");
+    expect(result.messages[0].content).toContain("WORLD RULE: Statute of Secrecy");
   });
 });
 

@@ -7,9 +7,11 @@ Return your response strictly as one JSON object with a "lorebookEntries" array.
 Each entry MUST include:
 - "name": A concise canonical entry name
 - "description": A factual summary useful for future writing continuity
-- "category": One of "character", "location", "item", "event", "note", "synopsis", or "starting scenario"
+- "category": One of "character", "location", "item", "event", "note", "synopsis", "starting scenario", "magic system", or "world rule"
 - "aliases": An array of names or phrases used to recognize this entry in prose
 - "tags": An array of descriptive labels for organization, not lookup aliases
+
+Use "magic system" for rules, costs, limits, schools, or sources of magic. Use "world rule" for durable setting constraints, social rules, laws, taboos, canon assumptions, or AU divergence rules.
 
 Optional:
 - "metadata": An object for importance, status, relationships, or customFields

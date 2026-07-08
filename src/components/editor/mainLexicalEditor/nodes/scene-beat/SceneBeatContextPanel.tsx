@@ -23,7 +23,7 @@ import { useSBStore } from '@/features/scenebeats/stores/useSceneBeatInstanceSto
 import { useLorebookStore } from '@/features/lorebook/stores/useLorebookStore';
 import { useStoryContext } from '@/features/stories/context/StoryContext';
 import { CreateEntryDialog } from '@/features/lorebook/components/CreateEntryDialog';
-import type { LorebookEntry } from '@/types/story';
+import { LOREBOOK_CATEGORIES, type LorebookEntry } from '@/types/story';
 
 export function SceneBeatContextPanel() {
     const showContext = useSBStore((s) => s.showContext);
@@ -170,13 +170,13 @@ export function SceneBeatContextPanel() {
                                             <SelectValue placeholder="Select lorebook item" />
                                         </SelectTrigger>
                                         <SelectContent className="max-h-[300px]">
-                                            {['character', 'location', 'item', 'event', 'note'].map((category) => {
+                                            {LOREBOOK_CATEGORIES.map((category) => {
                                                 const categoryItems = entries.filter((e) => e.category === category);
                                                 if (categoryItems.length === 0) return null;
                                                 return (
                                                     <div key={category}>
                                                         <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground bg-muted capitalize">
-                                                            {category}s
+                                                            {formatLorebookCategoryGroupLabel(category)}
                                                         </div>
                                                         {categoryItems.map((entry) => (
                                                             <SelectItem
@@ -246,4 +246,19 @@ export function SceneBeatContextPanel() {
             )}
         </div>
     );
+}
+
+function formatLorebookCategoryGroupLabel(category: string): string {
+    switch (category) {
+        case 'starting scenario':
+            return 'Starting Scenarios';
+        case 'magic system':
+            return 'Magic Systems';
+        case 'world rule':
+            return 'World Rules';
+        case 'synopsis':
+            return 'Synopsis';
+        default:
+            return `${category.charAt(0).toUpperCase()}${category.slice(1)}s`;
+    }
 }
