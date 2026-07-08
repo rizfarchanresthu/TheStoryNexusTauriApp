@@ -85,6 +85,30 @@ function Read-ReleaseBody {
     return ($bodyLines -join "`n").Trim()
 }
 
+function Write-Utf8NoBomFile {
+    param(
+        [string]$Path,
+        [string]$Value
+    )
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText($Path, $Value, $utf8NoBom)
+}
+
+function Assert-NoUtf8Bom {
+    param([string]$Path)
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if (
+        $bytes.Length -ge 3 -and
+        $bytes[0] -eq 0xEF -and
+        $bytes[1] -eq 0xBB -and
+        $bytes[2] -eq 0xBF
+    ) {
+        throw "$Path must be UTF-8 without a BOM. Tauri updater metadata with a BOM fails to decode."
+    }
+}
+
 function Assert-Version {
     $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
     if ($packageVersion -ne $Version) {
@@ -155,6 +179,11 @@ Invoke-Step "Generate latest.json" "make" @(
     "RELEASE_NOTES=$releaseTitle"
 )
 
+if (-not $DryRun) {
+    Assert-NoUtf8Bom -Path $latestJsonPath
+    Get-Content -LiteralPath $latestJsonPath -Raw | ConvertFrom-Json | Out-Null
+}
+
 $releaseBody = Read-ReleaseBody -Path $NotesFile
 if ($DryRun) {
     Write-Host ""
@@ -162,7 +191,7 @@ if ($DryRun) {
     Write-Host $releaseBody
 } else {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $releaseNotesPath) | Out-Null
-    Set-Content -LiteralPath $releaseNotesPath -Value $releaseBody -Encoding UTF8
+    Write-Utf8NoBomFile -Path $releaseNotesPath -Value $releaseBody
 }
 
 $localTagExists = $false

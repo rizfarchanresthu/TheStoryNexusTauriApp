@@ -139,6 +139,8 @@ make -f Makefile updater-json MSI_URL=https://github.com/vijayk1989/TheStoryNexu
 
 Upload `dist/updater/latest.json` to the same GitHub Release. Existing apps check that JSON to discover the latest update.
 
+The updater metadata must be UTF-8 without a byte-order mark. The release helper writes and validates this format because Tauri can fail to decode `latest.json` if Windows PowerShell writes it with a BOM.
+
 To create a full GitHub release locally with the GitHub CLI, first run `gh auth login`, then:
 
 ```sh
