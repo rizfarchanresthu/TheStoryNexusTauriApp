@@ -1,6 +1,6 @@
 # The Story Nexus
 
-Version: `1.1.0`
+Version: `1.2.8`
 
 The Story Nexus is a local-first desktop writing app for long-form fiction. It combines a chapter-focused editor with story context, lorebook matching, reusable AI prompts, brainstorm chats, and multi-agent generation pipelines.
 
@@ -103,6 +103,60 @@ Create a release desktop build:
 
 ```sh
 npm run tauri build
+```
+
+## Manual Updater Release Helpers
+
+This repo includes a `Makefile` for the Tauri updater signing and manual GitHub Release flow. The Makefile is safe to commit because it does not contain secrets. It defaults the private updater key to your user profile at `C:\Users\<you>\.tauri\thestorynexus.key` and the key password file to `C:\Users\<you>\.tauri\thestorynexus.key.password`.
+
+The examples use `make -f Makefile` because some Windows `make` installations do not auto-discover the default makefile name.
+
+Generate the updater signing key once:
+
+```sh
+make -f Makefile updater-key
+```
+
+Keep the private key and password file safe, and never commit either one. Add the printed public key to `src-tauri/tauri.conf.json` when enabling or rotating the updater plugin key.
+
+Build a signed release:
+
+```sh
+make -f Makefile updater-build
+```
+
+List the generated MSI and signature files:
+
+```sh
+make -f Makefile updater-files
+```
+
+After uploading the MSI to a GitHub Release, create the static updater metadata:
+
+```sh
+make -f Makefile updater-json MSI_URL=https://github.com/vijayk1989/TheStoryNexusTauriApp/releases/download/1.2.8/thestorynexus_1.2.8_x64_en-US.msi SIG_FILE=src-tauri/target/release/bundle/msi/thestorynexus_1.2.8_x64_en-US.msi.sig RELEASE_NOTES="The Story Nexus 1.2.8"
+```
+
+Upload `dist/updater/latest.json` to the same GitHub Release. Existing apps check that JSON to discover the latest update.
+
+The updater metadata must be UTF-8 without a byte-order mark. The release helper writes and validates this format because Tauri can fail to decode `latest.json` if Windows PowerShell writes it with a BOM.
+
+To create a full GitHub release locally with the GitHub CLI, first run `gh auth login`, then:
+
+```sh
+make -f Makefile release VERSION=1.2.8
+```
+
+Preview the commands and user-facing release body without building, tagging, pushing, or creating a release:
+
+```sh
+make -f Makefile release-dry-run VERSION=1.2.8
+```
+
+The Makefile uses `npm.cmd` by default because it is the most reliable npm shim for Windows automation. If `npm` works in your shell, you can override it:
+
+```sh
+make -f Makefile updater-build NPM=npm
 ```
 
 ## Linux And Mac Installers

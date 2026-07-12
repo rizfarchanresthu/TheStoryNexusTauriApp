@@ -9,6 +9,19 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "react-toastify";
+import { LOREBOOK_CATEGORIES, type LorebookCategory } from "@/types/story";
+
+const CATEGORY_LABELS: Record<LorebookCategory, string> = {
+    character: "Characters",
+    location: "Locations",
+    item: "Items",
+    event: "Events",
+    note: "Notes",
+    synopsis: "Synopsis",
+    "starting scenario": "Starting",
+    "magic system": "Magic Systems",
+    "world rule": "World Rules",
+};
 
 export default function LorebookPage() {
     const { storyId } = useParams<{ storyId: string }>();
@@ -146,48 +159,15 @@ export default function LorebookPage() {
                         >
                             All ({entries.length})
                         </TabsTrigger>
-                        <TabsTrigger
-                            value="character"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Characters ({categoryCounts.character || 0})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="location"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Locations ({categoryCounts.location || 0})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="item"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Items ({categoryCounts.item || 0})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="event"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Events ({categoryCounts.event || 0})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="note"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Notes ({categoryCounts.note || 0})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="synopsis"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Synopsis ({categoryCounts.synopsis || 0})
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="starting scenario"
-                            className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
-                        >
-                            Starting ({categoryCounts['starting scenario'] || 0})
-                        </TabsTrigger>
+                        {LOREBOOK_CATEGORIES.map((category) => (
+                            <TabsTrigger
+                                key={category}
+                                value={category}
+                                className="whitespace-nowrap text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-primary"
+                            >
+                                {CATEGORY_LABELS[category]} ({categoryCounts[category] || 0})
+                            </TabsTrigger>
+                        ))}
                     </TabsList>
                 </div>
 

@@ -34,6 +34,14 @@ dist-ssr
 
 # Doc files
 src-tauri/gen/
+docs/APP_FEATURE_DEEP_DIVE.md
+
+# Tauri release/updater artifacts and local secrets
+src-tauri/target/
+dist/updater/
+.tauri/
+*.key
+*.key.pub
 
 # Playwright
 /test-results/

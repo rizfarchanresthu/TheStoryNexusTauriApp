@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AlertTriangle, Download, FileUp, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, FileUp, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,13 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { siteBackupService } from "@/services/siteBackupService";
+import {
+    canUseUpdater,
+    checkForAppUpdate,
+    installAppUpdate,
+    type AppUpdate,
+    type UpdateInstallProgress,
+} from "@/services/updateService";
 
 interface MiscSettingsPanelProps {
     onSiteDataChanged?: (preferredStoryId?: string | null) => Promise<void> | void;
@@ -29,6 +36,47 @@ export function MiscSettingsPanel({ onSiteDataChanged }: MiscSettingsPanelProps)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
     const [isDeleting, setIsDeleting] = useState(false);
+    const [availableUpdate, setAvailableUpdate] = useState<AppUpdate | null>(null);
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+    const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+    const [updateProgress, setUpdateProgress] = useState<UpdateInstallProgress | null>(null);
+
+    const handleCheckForUpdates = async () => {
+        if (!canUseUpdater()) {
+            toast.info("Update checks are available in the desktop app.");
+            return;
+        }
+
+        try {
+            setIsCheckingUpdate(true);
+            setUpdateProgress(null);
+            const update = await checkForAppUpdate();
+            setAvailableUpdate(update);
+            if (update) {
+                toast.success(`Update ${update.version} is available`);
+            } else {
+                toast.info("The Story Nexus is up to date");
+            }
+        } catch (error) {
+            console.error("Update check failed:", error);
+            toast.error(error instanceof Error ? error.message : "Failed to check for updates");
+        } finally {
+            setIsCheckingUpdate(false);
+        }
+    };
+
+    const handleInstallUpdate = async () => {
+        if (!availableUpdate) return;
+
+        try {
+            setIsInstallingUpdate(true);
+            await installAppUpdate(availableUpdate, setUpdateProgress);
+        } catch (error) {
+            console.error("Update install failed:", error);
+            toast.error(error instanceof Error ? error.message : "Failed to install update");
+            setIsInstallingUpdate(false);
+        }
+    };
 
     const handleCreateBackup = async () => {
         try {
@@ -86,6 +134,59 @@ export function MiscSettingsPanel({ onSiteDataChanged }: MiscSettingsPanelProps)
 
     return (
         <div className="space-y-6">
+            <section className="space-y-3 rounded-md border border-border bg-card p-4">
+                <div>
+                    <h3 className="font-medium">App Updates</h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        The desktop app checks for updates on startup. You can also check manually here.
+                    </p>
+                </div>
+
+                {availableUpdate && (
+                    <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm">
+                        <div className="font-medium">Update {availableUpdate.version} is available</div>
+                        <div className="mt-1 text-muted-foreground">
+                            Current version: {availableUpdate.currentVersion}
+                        </div>
+                        {availableUpdate.body && (
+                            <div className="mt-2 whitespace-pre-wrap text-muted-foreground">
+                                {availableUpdate.body}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {updateProgress && (
+                    <div className="text-sm text-muted-foreground">
+                        {updateProgress.phase === "finished"
+                            ? "Installing update..."
+                            : formatUpdateProgress(updateProgress)}
+                    </div>
+                )}
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                        variant="outline"
+                        onClick={handleCheckForUpdates}
+                        disabled={isCheckingUpdate || isInstallingUpdate}
+                    >
+                        <RefreshCw className={isCheckingUpdate ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
+                        {isCheckingUpdate ? "Checking..." : "Check for Updates"}
+                    </Button>
+                    <Button
+                        onClick={handleInstallUpdate}
+                        disabled={!availableUpdate || isCheckingUpdate || isInstallingUpdate}
+                    >
+                        {isInstallingUpdate ? (
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Download className="mr-2 h-4 w-4" />
+                        )}
+                        {isInstallingUpdate ? "Installing..." : "Install Update"}
+                    </Button>
+                </div>
+            </section>
+
             <section className="space-y-3 rounded-md border border-border bg-card p-4">
                 <div>
                     <h3 className="font-medium">Site Backup</h3>
@@ -188,4 +289,19 @@ export function MiscSettingsPanel({ onSiteDataChanged }: MiscSettingsPanelProps)
             </AlertDialog>
         </div>
     );
+}
+
+function formatUpdateProgress(progress: UpdateInstallProgress) {
+    if (!progress.contentLength) {
+        return `Downloaded ${formatBytes(progress.downloadedBytes)}`;
+    }
+
+    const percent = Math.round((progress.downloadedBytes / progress.contentLength) * 100);
+    return `Downloaded ${percent}%`;
+}
+
+function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

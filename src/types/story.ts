@@ -13,12 +13,24 @@ export type PovType =
   | "Third Person Omniscient"
   | "Third Person (Objective)";
 
+export type EditorBackgroundFit = "cover" | "contain" | "contain-repeat";
+export type EditorBackgroundPosition = "center" | "top" | "bottom";
+
+export interface EditorBackgroundSettings {
+  assetId?: string;
+  enabled: boolean;
+  dim: number;
+  fit: EditorBackgroundFit;
+  position: EditorBackgroundPosition;
+}
+
 // Core story type
 export interface Story extends BaseEntity {
   title: string;
   author: string;
   language: string;
   synopsis?: string;
+  editorBackground?: EditorBackgroundSettings;
 }
 
 // Chapter structure
@@ -102,6 +114,7 @@ export interface ChatMessage {
 export type BrainstormOutputMode =
   | "normal"
   | "lorebook_entries"
+  | "world_seed"
   | "chapter_outline"
   | "story_decisions"
   | "open_questions";
@@ -323,18 +336,25 @@ export interface Note extends BaseEntity {
 }
 
 // Lorebook types
+export const LOREBOOK_CATEGORIES = [
+  "character",
+  "location",
+  "item",
+  "event",
+  "note",
+  "synopsis",
+  "starting scenario",
+  "magic system",
+  "world rule",
+] as const;
+
+export type LorebookCategory = (typeof LOREBOOK_CATEGORIES)[number];
+
 export interface LorebookEntry extends BaseEntity {
   storyId: string;
   name: string;
   description: string;
-  category:
-    | "character"
-    | "location"
-    | "item"
-    | "event"
-    | "note"
-    | "synopsis"
-    | "starting scenario";
+  category: LorebookCategory;
   // Aliases are lookup phrases used for lore matching in chapters and SceneBeats.
   aliases: string[];
   // Tags are descriptive labels for filtering and organization.

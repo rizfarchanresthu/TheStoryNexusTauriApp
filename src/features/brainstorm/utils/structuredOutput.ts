@@ -1,4 +1,4 @@
-import type { BrainstormOutputMode } from "@/types/story";
+import { LOREBOOK_CATEGORIES, type BrainstormOutputMode } from "@/types/story";
 
 export type StructuredOutputOption = {
   value: BrainstormOutputMode;
@@ -31,6 +31,11 @@ export const STRUCTURED_OUTPUT_OPTIONS: StructuredOutputOption[] = [
     value: "lorebook_entries",
     label: "Lorebook Entries",
     description: "Return importable lorebook entry JSON.",
+  },
+  {
+    value: "world_seed",
+    label: "World Seed",
+    description: "Return a starter world as importable lorebook entry JSON.",
   },
   {
     value: "chapter_outline",
@@ -78,10 +83,45 @@ Use this exact shape:
     }
   ]
 }
-Allowed category values: "character", "location", "item", "event", "note", "synopsis", "starting scenario".
+Allowed category values: ${LOREBOOK_CATEGORIES.map((category) => `"${category}"`).join(", ")}.
+Use "magic system" for rules, costs, limits, sources, schools, or mechanics of magic and supernatural systems.
+Use "world rule" for durable setting constraints, social rules, laws, taboos, canon assumptions, or AU divergence rules.
 Aliases are lookup names, nicknames, titles, alternate spellings, or exact phrases used to match this entry in chapters and SceneBeats.
 Tags are descriptive labels for organization, such as traits, roles, themes, or categories. Do not put aliases in tags.
 Only include entries that are specific enough to save to a lorebook.`;
+
+    case "world_seed":
+      return `STRUCTURED OUTPUT MODE: World Seed
+Return a starter world or AU premise as JSON inside one fenced \`\`\`json code block. Do not include prose outside the code block.
+Use this exact shape:
+{
+  "lorebookEntries": [
+    {
+      "name": "Entry name",
+      "description": "Durable worldbuilding fact, character fact, premise rule, or starting situation",
+      "aliases": ["name or exact phrase used to recognize this entry in prose"],
+      "tags": ["descriptive label"],
+      "category": "synopsis",
+      "metadata": {
+        "importance": "major",
+        "status": "active",
+        "type": "world_seed"
+      },
+      "isDisabled": false
+    }
+  ]
+}
+Allowed category values: ${LOREBOOK_CATEGORIES.map((category) => `"${category}"`).join(", ")}.
+Create a balanced seed, not an encyclopedia. Include:
+- exactly one "synopsis" entry for the premise and divergence point
+- 1-3 "starting scenario" entries with playable opening situations
+- major "character" entries requested by the user
+- key "location", "event", or "item" entries only when they matter to the premise
+- "magic system" entries for supernatural mechanics, limits, costs, schools, or sources
+- "world rule" entries for canon assumptions, AU divergence rules, social constraints, laws, taboos, or continuity rules
+Do not put setting mechanics or continuity constraints into generic "note" entries when "magic system" or "world rule" fits.
+Aliases should be precise lookup names, nicknames, titles, alternate spellings, or exact phrases. Avoid broad aliases such as "magic", "school", "the", "he", or "she".
+Tags are descriptive labels for organization. Do not put aliases in tags.`;
 
     case "chapter_outline":
       return `STRUCTURED OUTPUT MODE: Chapter Outline

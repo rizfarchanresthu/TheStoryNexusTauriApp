@@ -1,4 +1,4 @@
-import type { LorebookEntry } from '@/types/story';
+import { LOREBOOK_CATEGORIES, type LorebookEntry } from '@/types/story';
 
 type ParseResult = {
   entries: Partial<LorebookEntry>[];
@@ -58,15 +58,7 @@ export function parseLorebookJson(message: string): ParseResult {
 }
 
 function sanitizeResults(raw: any[]): Partial<LorebookEntry>[] {
-  const allowedCategories = new Set([
-    'character',
-    'location',
-    'item',
-    'event',
-    'note',
-    'synopsis',
-    'starting scenario',
-  ]);
+  const allowedCategories = new Set<string>(LOREBOOK_CATEGORIES);
 
   return raw
     .filter((obj) => obj && typeof obj === 'object')

@@ -1,3 +1,16 @@
+.sn-story-editor-main-area {
+    background-color: hsl(var(--background));
+    background-image:
+        linear-gradient(
+            hsl(var(--background) / var(--sn-editor-bg-overlay-opacity, 1)),
+            hsl(var(--background) / var(--sn-editor-bg-overlay-opacity, 1))
+        ),
+        var(--sn-editor-bg-image, none);
+    background-position: center, var(--sn-editor-bg-position, center);
+    background-repeat: no-repeat, var(--sn-editor-bg-repeat, no-repeat);
+    background-size: cover, var(--sn-editor-bg-size, cover);
+}
+
 .sn-main-editor-shell {
     min-height: 100vh;
 }
@@ -26,7 +39,7 @@
     position: relative;
     --sn-main-editor-placeholder-top: 78px;
     overflow: visible;
-    background: hsl(var(--background));
+    background: transparent;
 }
 
 .sn-main-editor-streaming .sn-main-editor-toolbar,

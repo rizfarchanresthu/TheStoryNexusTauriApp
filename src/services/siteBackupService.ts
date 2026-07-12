@@ -166,6 +166,7 @@ export const siteBackupService = {
             id: storyIdMap.get(story.id)!,
             title: importedName(story.title, storyNames),
             createdAt: reviveDate(story.createdAt),
+            editorBackground: undefined,
         }));
         importedStoryIds.push(...stories.map((story) => story.id));
 

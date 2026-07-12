@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useLorebookStore } from "@/features/lorebook/stores/useLorebookStore";
+import { LOREBOOK_CATEGORIES } from "@/types/story";
 
 import type { useSelectionAiRewrite } from "./useSelectionAiRewrite";
 
@@ -272,7 +273,7 @@ function LorebookContextSection({ ai }: { ai: Ai }): JSX.Element {
                                         <SelectValue placeholder="Select lorebook item..." />
                                     </SelectTrigger>
                                     <SelectContent className="max-h-[200px]">
-                                        {["character", "location", "item", "event", "note"].map(
+                                        {LOREBOOK_CATEGORIES.map(
                                             (category) => {
                                                 const categoryItems = entries.filter(
                                                     (entry) => entry.category === category,
@@ -282,7 +283,7 @@ function LorebookContextSection({ ai }: { ai: Ai }): JSX.Element {
                                                 return (
                                                     <div key={category}>
                                                         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted capitalize">
-                                                            {category}s
+                                                            {formatLorebookCategoryGroupLabel(category)}
                                                         </div>
                                                         {categoryItems.map((entry) => (
                                                             <SelectItem
@@ -331,4 +332,19 @@ function LorebookContextSection({ ai }: { ai: Ai }): JSX.Element {
             )}
         </div>
     );
+}
+
+function formatLorebookCategoryGroupLabel(category: string): string {
+    switch (category) {
+        case "starting scenario":
+            return "Starting Scenarios";
+        case "magic system":
+            return "Magic Systems";
+        case "world rule":
+            return "World Rules";
+        case "synopsis":
+            return "Synopsis";
+        default:
+            return `${category.charAt(0).toUpperCase()}${category.slice(1)}s`;
+    }
 }

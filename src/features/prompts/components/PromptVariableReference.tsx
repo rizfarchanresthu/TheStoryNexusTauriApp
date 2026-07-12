@@ -214,6 +214,18 @@ const VARIABLE_GROUPS: PromptVariableGroup[] = [
                 availability: ["Lorebook"],
             },
             {
+                token: "{{all_magic_systems}}",
+                label: "All magic systems",
+                description: "All magic system entries from the lorebook.",
+                availability: ["Lorebook"],
+            },
+            {
+                token: "{{all_world_rules}}",
+                label: "All world rules",
+                description: "All world rule entries from the lorebook.",
+                availability: ["Lorebook"],
+            },
+            {
                 token: "{{character Alias}}",
                 label: "Character by name or alias",
                 description: "A specific character entry by name or alias.",

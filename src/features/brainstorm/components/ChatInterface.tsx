@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Send, ChevronDown, ChevronUp, X, Plus, Square, Edit, Bot, Activity, Download, RefreshCw, Globe, Save, Pencil } from "lucide-react";
@@ -15,6 +16,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -33,9 +36,9 @@ import { useAgenticGeneration } from "@/features/agents/hooks/useAgenticGenerati
 import { db } from "@/services/database";
 import MarkdownRenderer from "./MarkdownRenderer";
 import parseLorebookJson from "@/features/brainstorm/utils/parseLorebookJson";
-import { CreateEntryDialog } from '@/features/lorebook/components/CreateEntryDialog';
 import { cn } from '@/lib/utils';
 import {
+  LOREBOOK_CATEGORIES,
   LorebookEntry,
   ChatMessage,
   Prompt,
@@ -84,6 +87,16 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
   const INITIAL_TEXTAREA_HEIGHT = 80; // px
   const MAX_TEXTAREA_HEIGHT = 600; // px
 
+  const resizeBrainstormTextarea = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+
+    ta.style.height = 'auto';
+    const contentHeight = ta.scrollHeight;
+    const newHeight = Math.min(Math.max(contentHeight, INITIAL_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT);
+    ta.style.height = `${newHeight}px`;
+    ta.style.overflowY = contentHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
+  };
 
   // State for context selection
   const [includeFullContext, setIncludeFullContext] = useState(false);
@@ -175,33 +188,17 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
 
   // Ensure the textarea starts at the initial height on mount
   useEffect(() => {
-    const ta = textareaRef.current;
-    if (ta) {
-      const contentHeight = ta.scrollHeight;
-      const newHeight = Math.min(Math.max(contentHeight, INITIAL_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT);
-      ta.style.height = `${newHeight}px`;
-      ta.style.overflowY = contentHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
-    }
+    resizeBrainstormTextarea();
   }, []);
+
+  useEffect(() => {
+    resizeBrainstormTextarea();
+  }, [input]);
 
   // Keep local input in sync when selected chat changes and reset height when cleared
   useEffect(() => {
     const draftMessage = useBrainstormStore.getState().draftMessage;
     setInput(draftMessage);
-    const ta = textareaRef.current;
-    if (ta) {
-      if (!draftMessage) {
-        // reset to initial height when cleared
-        ta.style.height = `${INITIAL_TEXTAREA_HEIGHT}px`;
-        ta.style.overflowY = 'hidden';
-      } else {
-        const contentHeight = ta.scrollHeight;
-        const newHeight = Math.min(Math.max(contentHeight, INITIAL_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT);
-        ta.style.height = 'auto';
-        ta.style.height = `${newHeight}px`;
-        ta.style.overflowY = contentHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
-      }
-    }
   }, [selectedChat]);
   const [selectedModel, setSelectedModel] = useState<AllowedModel | null>(null);
   const [availableModels, setAvailableModels] = useState<AllowedModel[]>([]);
@@ -573,20 +570,6 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     }
   };
 
-  // One-click lorebook template insertion
-  const LOREBOOK_TEMPLATE = `Please produce exactly one JSON object (or an array of objects) inside a \`\`\`json\ncode block only. Do NOT include any surrounding explanation or commentary. Each object should include at least a \"name\" field (string). Optional fields: \"description\" (string), \"aliases\" (array of lookup names and phrases), \"tags\" (array of descriptive labels), \"category\" (one of [\"character\",\"location\",\"item\",\"event\",\"note\",\"synopsis\",\"starting scenario\"]), \"metadata\" (object), and \"isDisabled\" (boolean).\n\nExample:\n{\n  \"name\": \"Elandra, Crowned Hunter\",\n  \"description\": \"A skilled tracker and ruler of the northern woodlands.\",\n  \"aliases\": [\"Elandra\", \"Crowned Hunter\"],\n  \"tags\": [\"ranger\", \"royalty\"],\n  \"category\": \"character\",\n  \"metadata\": { \"importance\": \"major\", \"status\": \"active\" }\n}\n\nAliases are lookup names or phrases used to match this entry in prose. Tags are descriptive labels for organization.\n\nReturn only the JSON inside the fenced code block.`;
-
-  const insertLorebookTemplate = () => {
-    // Append the template to existing input rather than replacing it
-    const existing = input || "";
-    const separator = existing.trim() ? "\n\n" : "";
-    const newText = `${existing}${separator}${LOREBOOK_TEMPLATE}`;
-    setInput(newText);
-    setDraftMessage(newText);
-    // focus the textarea so the user can edit immediately
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  };
-
   // Update preview when context settings change
   useEffect(() => {
     if (showPreview && selectedPrompt) {
@@ -916,8 +899,10 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
   };
 
   // Extraction UI state
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [dialogEntry, setDialogEntry] = useState<Partial<LorebookEntry> | null>(null);
+  const [reviewEntries, setReviewEntries] = useState<Partial<LorebookEntry>[]>([]);
+  const [selectedReviewIndexes, setSelectedReviewIndexes] = useState<Set<number>>(new Set());
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [isImportingReviewedEntries, setIsImportingReviewedEntries] = useState(false);
 
   // Templates dialog state (for creating/editing insert templates)
   const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
@@ -936,27 +921,70 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
       return;
     }
 
+    const existingNames = new Set(
+      lorebookEntries
+        .filter((entry) => entry.storyId === storyId)
+        .map((entry) => entry.name.toLowerCase().trim())
+    );
+    const defaultSelected = parsed.entries
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => !entry.name || !existingNames.has(entry.name.toLowerCase().trim()))
+      .map(({ index }) => index);
+
+    setReviewEntries(parsed.entries);
+    setSelectedReviewIndexes(new Set(defaultSelected));
+    setReviewDialogOpen(true);
+  };
+
+  const toggleReviewEntry = (index: number, checked: boolean) => {
+    setSelectedReviewIndexes((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(index);
+      } else {
+        next.delete(index);
+      }
+      return next;
+    });
+  };
+
+  const setAllReviewEntriesSelected = (checked: boolean) => {
+    setSelectedReviewIndexes(
+      checked ? new Set(reviewEntries.map((_, index) => index)) : new Set()
+    );
+  };
+
+  const handleImportReviewedEntries = async () => {
+    const entriesToImport = reviewEntries.filter((_, index) => selectedReviewIndexes.has(index));
+    if (entriesToImport.length === 0) {
+      toast.info("Select at least one lorebook entry to import.");
+      return;
+    }
+
     try {
-      // create entries using store helper
-      for (const item of parsed.entries) {
-        // createEntry expects Omit<LorebookEntry, 'id' | 'createdAt'>
+      setIsImportingReviewedEntries(true);
+      for (const item of entriesToImport) {
         await useLorebookStore.getState().createEntry({
           ...item,
           storyId,
           aliases: item.aliases || [],
           tags: item.tags || [],
-          description: item.description || '',
-          category: (item.category as any) || 'note',
+          description: item.description || "",
+          category: normalizeLorebookCategory(item.category),
           metadata: item.metadata || {},
           isDisabled: item.isDisabled ?? false,
-        } as any);
+        } as Omit<LorebookEntry, "id" | "createdAt">);
       }
-      toast.success(`Created ${parsed.entries.length} lorebook entr${parsed.entries.length === 1 ? 'y' : 'ies'}`);
-      // reload entries
+      toast.success(`Created ${entriesToImport.length} lorebook entr${entriesToImport.length === 1 ? "y" : "ies"}`);
       await loadEntries(storyId);
+      setReviewDialogOpen(false);
+      setReviewEntries([]);
+      setSelectedReviewIndexes(new Set());
     } catch (err) {
-      console.error('Failed to import entries', err);
-      toast.error('Failed to create lorebook entries');
+      console.error("Failed to import entries", err);
+      toast.error("Failed to create lorebook entries");
+    } finally {
+      setIsImportingReviewedEntries(false);
     }
   };
 
@@ -1077,19 +1105,6 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     const newValue = e.target.value;
     setInput(newValue);
     setDraftMessage(newValue);
-    // Autosize as the user types
-    try {
-      const ta = textareaRef.current;
-      if (ta) {
-        ta.style.height = 'auto';
-        const contentHeight = ta.scrollHeight;
-        const newHeight = Math.min(Math.max(contentHeight, INITIAL_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT);
-        ta.style.height = `${newHeight}px`;
-        ta.style.overflowY = contentHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
-      }
-    } catch (err) {
-      // ignore
-    }
   };
 
   const handleDeleteMessage = (messageId: string) => {
@@ -1323,7 +1338,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                           disabled={streamingMessageId === message.id}
                         >
                           <Plus className="h-3.5 w-3.5" />
-                          Extract
+                          Review Entries
                         </Button>
                       )}
 
@@ -1375,7 +1390,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
       })}
       <div ref={messagesEndRef} />
     </div>
-  ), [messages, editingMessageId, editingContent, streamingMessageId, isGenerating, selectedChat?.id, storyId]);
+  ), [messages, editingMessageId, editingContent, streamingMessageId, isGenerating, selectedChat?.id, storyId, lorebookEntries]);
 
   return (
     <div className="flex flex-col h-full">
@@ -1604,15 +1619,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                     </SelectTrigger>
                     <SelectContent>
                       {/* Group by all available categories */}
-                      {[
-                        "character",
-                        "location",
-                        "item",
-                        "event",
-                        "note",
-                        "synopsis",
-                        "starting scenario",
-                      ].map((category) => {
+                      {LOREBOOK_CATEGORIES.map((category) => {
                         const categoryItems = getFilteredEntries().filter(
                           (entry) => entry.category === category
                         );
@@ -1621,9 +1628,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                         return (
                           <div key={category}>
                             <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground bg-muted capitalize">
-                              {category === "starting scenario"
-                                ? "Starting Scenarios"
-                                : `${category}s`}
+                              {formatLorebookCategoryGroupLabel(category)}
                             </div>
                             {categoryItems.map((entry) => (
                               <SelectItem
@@ -1926,7 +1931,10 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                         const newText = `${existing}${separator}${tpl.content}`;
                         setInput(newText);
                         setDraftMessage(newText);
-                        setTimeout(() => textareaRef.current?.focus(), 50);
+                        setTimeout(() => {
+                          resizeBrainstormTextarea();
+                          textareaRef.current?.focus();
+                        }, 0);
                       }
                     }
                   } finally {
@@ -2090,15 +2098,16 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
           )}
         </DialogContent>
       </Dialog>
-      {/* Create Entry Dialog used when extracting a single parsed entry */}
-      <CreateEntryDialog
-        open={createDialogOpen}
-        onOpenChange={() => {
-          setCreateDialogOpen(false);
-          setDialogEntry(null);
-        }}
-        storyId={storyId}
-        entry={dialogEntry as any}
+      <LorebookImportReviewDialog
+        open={reviewDialogOpen}
+        onOpenChange={setReviewDialogOpen}
+        entries={reviewEntries}
+        existingEntries={lorebookEntries.filter((entry) => entry.storyId === storyId)}
+        selectedIndexes={selectedReviewIndexes}
+        onToggleEntry={toggleReviewEntry}
+        onToggleAll={setAllReviewEntriesSelected}
+        onImport={handleImportReviewedEntries}
+        isImporting={isImportingReviewedEntries}
       />
       {/* Create / Edit Template Dialog */}
       <CreateTemplateDialog
@@ -2124,6 +2133,193 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
       />
     </div>
   );
+}
+
+function formatLorebookCategoryGroupLabel(category: string): string {
+  switch (category) {
+    case "starting scenario":
+      return "Starting Scenarios";
+    case "magic system":
+      return "Magic Systems";
+    case "world rule":
+      return "World Rules";
+    case "synopsis":
+      return "Synopsis";
+    default:
+      return `${category.charAt(0).toUpperCase()}${category.slice(1)}s`;
+  }
+}
+
+function LorebookImportReviewDialog({
+  open,
+  onOpenChange,
+  entries,
+  existingEntries,
+  selectedIndexes,
+  onToggleEntry,
+  onToggleAll,
+  onImport,
+  isImporting,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  entries: Partial<LorebookEntry>[];
+  existingEntries: LorebookEntry[];
+  selectedIndexes: Set<number>;
+  onToggleEntry: (index: number, checked: boolean) => void;
+  onToggleAll: (checked: boolean) => void;
+  onImport: () => Promise<void>;
+  isImporting: boolean;
+}) {
+  const selectedCount = selectedIndexes.size;
+  const allSelected = entries.length > 0 && selectedCount === entries.length;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[760px] max-h-[85vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>Review Lorebook Entries</DialogTitle>
+          <DialogDescription>
+            Select the generated entries to add to this story.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex items-center justify-between gap-3 border-y py-2">
+          <div className="text-sm text-muted-foreground">
+            {selectedCount} of {entries.length} selected
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onToggleAll(!allSelected)}
+          >
+            {allSelected ? "Clear all" : "Select all"}
+          </Button>
+        </div>
+
+        <ScrollArea className="max-h-[52vh] pr-4">
+          <div className="space-y-3 py-3">
+            {entries.map((entry, index) => {
+              const warnings = getLorebookImportWarnings(entry, existingEntries);
+              const checkboxId = `review-lorebook-entry-${index}`;
+              const category = normalizeLorebookCategory(entry.category);
+
+              return (
+                <div key={`${entry.name || "entry"}-${index}`} className="rounded-md border p-3">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id={checkboxId}
+                      checked={selectedIndexes.has(index)}
+                      onCheckedChange={(checked) => onToggleEntry(index, checked === true)}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label htmlFor={checkboxId} className="cursor-pointer text-sm font-medium">
+                          {entry.name || "Untitled entry"}
+                        </label>
+                        <Badge variant="secondary">{category}</Badge>
+                        {entry.metadata?.importance && (
+                          <Badge variant="outline">{entry.metadata.importance}</Badge>
+                        )}
+                      </div>
+                      <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">
+                        {entry.description || "No description provided."}
+                      </p>
+                      {entry.aliases && entry.aliases.length > 0 && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">Aliases:</span>{" "}
+                          {entry.aliases.join(", ")}
+                        </div>
+                      )}
+                      {entry.tags && entry.tags.length > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">Tags:</span>{" "}
+                          {entry.tags.join(", ")}
+                        </div>
+                      )}
+                      {warnings.length > 0 && (
+                        <div className="mt-2 space-y-1 text-xs text-amber-600 dark:text-amber-400">
+                          {warnings.map((warning) => (
+                            <div key={warning}>{warning}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isImporting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={onImport}
+            disabled={isImporting || selectedCount === 0}
+          >
+            {isImporting ? "Importing..." : `Import ${selectedCount}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function normalizeLorebookCategory(category: Partial<LorebookEntry>["category"]): LorebookEntry["category"] {
+  return category && LOREBOOK_CATEGORIES.includes(category) ? category : "note";
+}
+
+function getLorebookImportWarnings(
+  entry: Partial<LorebookEntry>,
+  existingEntries: LorebookEntry[]
+): string[] {
+  const warnings: string[] = [];
+  const normalizedName = entry.name?.toLowerCase().trim();
+
+  if (normalizedName && existingEntries.some((item) => item.name.toLowerCase().trim() === normalizedName)) {
+    warnings.push("Duplicate name already exists in this story.");
+  }
+
+  const broadAliases = (entry.aliases || []).filter(isBroadLorebookAlias);
+  if (broadAliases.length > 0) {
+    warnings.push(`Broad aliases may overmatch prose: ${broadAliases.join(", ")}`);
+  }
+
+  return warnings;
+}
+
+function isBroadLorebookAlias(alias: string): boolean {
+  const normalized = alias.toLowerCase().trim();
+  const broadTerms = new Set([
+    "a",
+    "an",
+    "the",
+    "he",
+    "she",
+    "they",
+    "we",
+    "i",
+    "magic",
+    "school",
+    "city",
+    "world",
+    "kingdom",
+    "empire",
+    "war",
+  ]);
+
+  return normalized.length < 3 || broadTerms.has(normalized);
 }
 
 function formatStoryDecisions(

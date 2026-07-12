@@ -44,6 +44,8 @@ export class PromptParser {
             'all_notes': this.resolveAllNotes.bind(this),
             'all_synopsis': this.resolveAllSynopsis.bind(this),
             'all_starting_scenarios': this.resolveAllStartingScenarios.bind(this),
+            'all_magic_systems': this.resolveAllMagicSystems.bind(this),
+            'all_world_rules': this.resolveAllWorldRules.bind(this),
             'timeline': this.resolveTimelineUpToCurrentChapter.bind(this),
             'timeline_up_to_current_chapter': this.resolveTimelineUpToCurrentChapter.bind(this),
             'timeline_current_chapter': this.resolveTimelineCurrentChapter.bind(this),
@@ -867,6 +869,16 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
         const { getAllStartingScenarios } = useLorebookStore.getState();
         // getAllStartingScenarios already filters out disabled entries
         return this.formatLorebookEntries(getAllStartingScenarios());
+    }
+
+    private async resolveAllMagicSystems(context: PromptContext): Promise<string> {
+        const { getAllMagicSystems } = useLorebookStore.getState();
+        return this.formatLorebookEntries(getAllMagicSystems());
+    }
+
+    private async resolveAllWorldRules(context: PromptContext): Promise<string> {
+        const { getAllWorldRules } = useLorebookStore.getState();
+        return this.formatLorebookEntries(getAllWorldRules());
     }
 
     private async resolveTimelineUpToCurrentChapter(context: PromptContext): Promise<string> {

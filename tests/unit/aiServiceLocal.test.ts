@@ -73,7 +73,9 @@ describe("AIService.testLocalDefaultModel", () => {
       model: "gemma-3",
       stream: true,
       temperature: 0,
-      max_tokens: 32,
+      max_tokens: 4096,
+      reasoning: { effort: "none" },
+      reasoning_effort: "none",
       messages: [
         { role: "user", content: "Reply with exactly this text: local test ok" },
       ],
@@ -109,6 +111,24 @@ describe("AIService.testLocalDefaultModel", () => {
     expect(JSON.parse(request.body as string)).toMatchObject({
       model: "gemma-3",
     });
+  });
+
+  test("omits temperature when prompt temperature is disabled", async () => {
+    fetchMock.mockResolvedValue(streamResponse("data: [DONE]\n\n"));
+
+    await aiService.generateWithLocalModel(
+      [{ role: "user", content: "Write a line." }],
+      undefined,
+      128,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "local"
+    );
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).not.toHaveProperty("temperature");
   });
 
   test("sends experimental reasoning controls only when requested", async () => {
