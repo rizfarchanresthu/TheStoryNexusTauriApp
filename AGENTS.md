@@ -68,6 +68,7 @@ In the final response, include:
 - which tests were run
 - whether any tests could not be run and why
 - important warnings that remain, such as existing bundle-size or Browserslist warnings
+- Do not report the known `npm.cmd run build` warnings for Lexical Rollup pure-comment annotations or the existing large chunk size unless they change or become relevant to the task.
 
 ## Editor And Lexical Rules
 
@@ -97,6 +98,29 @@ Update docs when adding or changing:
 - non-obvious debugging or recovery workflows
 
 Use `docs/PLAYWRIGHT_EDITOR_TESTING.md` for Playwright/editor/LLM test notes.
+
+## Release Automation
+
+When the user says changes have been added, committed, and pushed, and asks to create a new release:
+
+1. Read the release version from `package.json` unless the user gives a specific version.
+2. Confirm the working tree is clean with `git status --short`. Do not create a release from a dirty tree unless the user explicitly asks.
+3. Confirm GitHub CLI auth with `gh auth status`. If `gh` is not in PATH on Windows, check `C:\Program Files\GitHub CLI\gh.exe`.
+4. Run a preview first:
+
+```powershell
+make -f Makefile release-dry-run VERSION=<version>
+```
+
+5. If the dry run shows the correct user-facing release body and assets, create the release:
+
+```powershell
+make -f Makefile release VERSION=<version>
+```
+
+Release notes live in `docs/releases/<version>.md`. The `## GitHub Release Body` section must be user-facing only: mention new user-visible features, upgrade notes, and the MSI users should download. Do not include maintainer checklists, command-line steps, `.sig`, `latest.json`, updater signing internals, or other development details in the public release body.
+
+The release command builds, tests, creates the signed MSI, generates updater metadata, creates and pushes the git tag, creates the GitHub release, and uploads the MSI, `.sig`, and `latest.json`. Do not commit generated release artifacts or local updater secrets.
 
 ## UI Rules
 

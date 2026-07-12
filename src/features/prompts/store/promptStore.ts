@@ -83,7 +83,7 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
                 ...promptData,
                 id,
                 createdAt: new Date(),
-                temperature: promptData.temperature || 1.0,
+                temperature: promptData.temperature,
                 maxTokens: promptData.maxTokens || 4096,
                 top_p: promptData.top_p !== undefined ? promptData.top_p : 1.0,
                 top_k: promptData.top_k !== undefined ? promptData.top_k : 50,

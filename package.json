@@ -4,7 +4,7 @@
   "description": "A story writing app",
   "author": "Vijaykumar Bhattacharji",
   "private": true,
-  "version": "1.2.3",
+  "version": "1.2.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -68,6 +68,8 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "@types/prismjs": "^1.26.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

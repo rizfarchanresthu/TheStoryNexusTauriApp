@@ -100,7 +100,8 @@ export const storyExportService = {
                 ...data.story,
                 id: newStoryId,
                 createdAt: new Date(),
-                title: `${data.story.title} (Imported)`
+                title: `${data.story.title} (Imported)`,
+                editorBackground: undefined,
             };
 
             // Start a transaction to ensure all-or-nothing import

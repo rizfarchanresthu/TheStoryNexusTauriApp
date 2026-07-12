@@ -4,6 +4,7 @@ import parseLorebookJson from "@/features/brainstorm/utils/parseLorebookJson";
 import {
   buildBrainstormUserInput,
   parseBrainstormStructuredOutput,
+  STRUCTURED_OUTPUT_OPTIONS,
 } from "@/features/brainstorm/utils/structuredOutput";
 
 describe("brainstorm structured output", () => {
@@ -13,6 +14,25 @@ describe("brainstorm structured output", () => {
     expect(input).toContain("Extract this character.");
     expect(input).toContain("STRUCTURED OUTPUT MODE: Lorebook Entries");
     expect(input).toContain('"lorebookEntries"');
+  });
+
+  test("appends world seed instructions for world seed mode", () => {
+    const input = buildBrainstormUserInput("An academy AU with three leads.", "world_seed");
+
+    expect(input).toContain("An academy AU with three leads.");
+    expect(input).toContain("STRUCTURED OUTPUT MODE: World Seed");
+    expect(input).toContain('"synopsis" entry');
+    expect(input).toContain('"starting scenario" entries');
+    expect(input).toContain('"magic system"');
+    expect(input).toContain('"world rule"');
+  });
+
+  test("exposes world seed as a structured output option", () => {
+    expect(STRUCTURED_OUTPUT_OPTIONS).toContainEqual({
+      value: "world_seed",
+      label: "World Seed",
+      description: "Return a starter world as importable lorebook entry JSON.",
+    });
   });
 
   test("leaves normal brainstorm input unchanged", () => {
@@ -85,6 +105,37 @@ describe("brainstorm structured output", () => {
         aliases: ["Mara", "the cartographer"],
         tags: ["cartographer"],
       },
+    ]);
+  });
+
+  test("parses magic system and world rule lorebook categories", () => {
+    const parsed = parseLorebookJson(`
+\`\`\`json
+{
+  "lorebookEntries": [
+    {
+      "name": "Wand Magic",
+      "description": "Spellcasting requires a wand and clear intent.",
+      "category": "magic system",
+      "aliases": ["wand magic"],
+      "tags": ["spellcasting"]
+    },
+    {
+      "name": "Statute of Secrecy",
+      "description": "Magical society must remain hidden from non-magical society.",
+      "category": "world rule",
+      "aliases": ["secrecy statute"],
+      "tags": ["law"]
+    }
+  ]
+}
+\`\`\`
+`);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.entries.map((entry) => entry.category)).toEqual([
+      "magic system",
+      "world rule",
     ]);
   });
 

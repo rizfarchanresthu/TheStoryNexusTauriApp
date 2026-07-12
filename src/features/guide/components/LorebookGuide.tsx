@@ -222,7 +222,7 @@ export default function LorebookGuide() {
                                     <li>
                                         <strong>Category:</strong> Select the appropriate category for your entry
                                         <p className="text-sm text-muted-foreground ml-6">
-                                            Choose from character, location, item, event, note, synopsis, or starting scenario
+                                            Choose from character, location, item, event, note, synopsis, starting scenario, magic system, or world rule
                                         </p>
                                     </li>
                                     <li>

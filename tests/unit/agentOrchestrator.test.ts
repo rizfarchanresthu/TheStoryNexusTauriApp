@@ -13,6 +13,7 @@ vi.mock("@/services/ai/AIService", () => {
     generateWithOpenRouter: vi.fn(),
     generateWithOpenAICompatible: vi.fn(),
     generateWithNanoGPT: vi.fn(),
+    generateWithGoogle: vi.fn(),
     abortStream: vi.fn(),
     processStreamedResponse: vi.fn(async (
       response: Response,
@@ -35,6 +36,7 @@ vi.mock("@/services/ai/AIService", () => {
 describe("AgentOrchestrator", () => {
   beforeEach(() => {
     vi.mocked(aiService.generateWithOpenRouter).mockReset();
+    vi.mocked(aiService.generateWithGoogle).mockReset();
     vi.mocked(aiService.processStreamedResponse).mockClear();
   });
 
@@ -136,6 +138,23 @@ describe("AgentOrchestrator", () => {
     expect(stylePrompt).toContain("ISSUE: Restore the sword.");
     expect(result.displayOutput).toBe("Polished prose");
   });
+
+  test("routes Google agent models through the Google provider", async () => {
+    vi.mocked(aiService.generateWithGoogle).mockResolvedValueOnce(new Response("Gemini prose"));
+
+    const result = await agentOrchestrator.executePipeline(
+      [step(agent("prose_writer", { provider: "google", id: "gemini-2.0-flash" }))],
+      { scenebeat: "Write the scene." }
+    );
+
+    expect(aiService.generateWithGoogle).toHaveBeenCalledWith(
+      expect.any(Array),
+      "gemini-2.0-flash",
+      0.2,
+      256
+    );
+    expect(result.proseOutput).toBe("Gemini prose");
+  });
 });
 
 describe("system agent pipelines", () => {
@@ -157,13 +176,16 @@ function queueModelOutputs(...outputs: string[]): void {
   });
 }
 
-function agent(role: AgentRole): AgentPreset {
+function agent(
+  role: AgentRole,
+  model: AgentPreset["model"] = { id: "mock-model", name: "Mock Model", provider: "openrouter" }
+): AgentPreset {
   return {
     id: `agent-${role}`,
     createdAt: new Date(),
     name: role,
     role,
-    model: { id: "mock-model", name: "Mock Model", provider: "openrouter" },
+    model,
     systemPrompt: `System prompt for ${role}`,
     temperature: 0.2,
     maxTokens: 256,

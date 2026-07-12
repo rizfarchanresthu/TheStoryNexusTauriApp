@@ -210,7 +210,7 @@ export const useAIStore = create<AIState>((set, get) => ({
 
         // Get the prompt to access temperature and maxTokens
         const prompt = await db.prompts.get(config.promptId);
-        const temperature = prompt?.temperature ?? 0.7;
+        const temperature = prompt?.temperature;
         const maxTokens = prompt?.maxTokens ?? 2048;
 
         // Get the new parameters with their default values if not set
@@ -333,7 +333,7 @@ export const useAIStore = create<AIState>((set, get) => ({
             throw new Error(`Prompt with ID ${promptId} not found`);
         }
 
-        const temperature = prompt.temperature ?? 0.7;
+        const temperature = prompt.temperature;
         const maxTokens = prompt.maxTokens ?? 2048;
         const top_p = prompt.top_p;
         const top_k = prompt.top_k;

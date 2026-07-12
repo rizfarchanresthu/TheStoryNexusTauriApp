@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useLorebookStore } from "../stores/useLorebookStore";
 import { toast } from "react-toastify";
-import type { LorebookEntry } from "@/types/story";
+import { LOREBOOK_CATEGORIES, type LorebookEntry } from "@/types/story";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import {
@@ -37,15 +37,7 @@ interface CreateEntryDialogProps {
 
 // Use the category type directly from the LorebookEntry interface
 type LorebookCategory = LorebookEntry["category"];
-const CATEGORIES: LorebookCategory[] = [
-  "character",
-  "location",
-  "item",
-  "event",
-  "note",
-  "synopsis",
-  "starting scenario",
-];
+const CATEGORIES: LorebookCategory[] = [...LOREBOOK_CATEGORIES];
 const IMPORTANCE_LEVELS = ["major", "minor", "background"] as const;
 const STATUS_OPTIONS = ["active", "inactive", "historical"] as const;
 
