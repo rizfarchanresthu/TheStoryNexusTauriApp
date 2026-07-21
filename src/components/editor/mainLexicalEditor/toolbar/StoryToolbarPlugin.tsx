@@ -382,6 +382,7 @@ export function StoryToolbarPlugin() {
                         >
                             <GitBranch className="mr-2 h-4 w-4" />
                             Story Fork
+                            <span className="ml-auto text-xs text-muted-foreground">Alt+B</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             className="cursor-pointer"
@@ -481,6 +482,7 @@ export function StoryToolbarPlugin() {
                     >
                         <GitBranch className="mr-2 h-4 w-4" />
                         Story Fork
+                        <span className="ml-auto text-xs text-muted-foreground">Alt+B</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         className="sn-main-editor-mobile-menu-item"

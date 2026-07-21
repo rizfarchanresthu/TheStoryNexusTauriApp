@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     BookOpen,
+    Check,
     ChevronDown,
+    ChevronsUpDown,
     Edit,
     FilePlus,
     GripVertical,
@@ -51,6 +53,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AIGenerateMenu } from "@/components/ui/ai-generate-menu";
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 import {
     Select,
     SelectContent,
@@ -771,6 +786,15 @@ function EditorLeftRail({
     onDragEnd: (event: DragEndEvent) => void;
     sensors: ReturnType<typeof useSensors>;
 }) {
+    const [storyPickerOpen, setStoryPickerOpen] = useState(false);
+    const sortedStories = useMemo(
+        () =>
+            [...stories].sort((a, b) =>
+                a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+            ),
+        [stories]
+    );
+
     return (
         <aside className="sticky top-0 flex h-screen min-h-0 flex-col border-r border-border bg-surface">
             <div className="border-b border-border p-4">
@@ -785,18 +809,56 @@ function EditorLeftRail({
                     Current Story
                 </Label>
                 <div className="mt-2 flex gap-2">
-                    <Select value={currentStoryId || ""} onValueChange={onStorySelect}>
-                        <SelectTrigger className="h-9 min-w-0 flex-1 bg-elevated">
-                            <SelectValue placeholder="Choose story" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {stories.map((story) => (
-                                <SelectItem key={story.id} value={story.id}>
-                                    {story.title}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <Popover open={storyPickerOpen} onOpenChange={setStoryPickerOpen}>
+                        <PopoverTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={storyPickerOpen}
+                                aria-label="Current story"
+                                className="h-9 min-w-0 flex-1 justify-between bg-elevated px-3 font-normal"
+                            >
+                                <span className="truncate">
+                                    {currentStory?.title || "Choose story"}
+                                </span>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            className="w-[var(--radix-popover-trigger-width)] p-0"
+                            align="start"
+                        >
+                            <Command>
+                                <CommandInput placeholder="Search stories..." />
+                                <CommandList>
+                                    <CommandEmpty>No story found.</CommandEmpty>
+                                    <CommandGroup>
+                                        {sortedStories.map((story) => (
+                                            <CommandItem
+                                                key={story.id}
+                                                value={story.title}
+                                                onSelect={() => {
+                                                    onStorySelect(story.id);
+                                                    setStoryPickerOpen(false);
+                                                }}
+                                            >
+                                                <Check
+                                                    className={cn(
+                                                        "mr-2 h-4 w-4",
+                                                        currentStoryId === story.id
+                                                            ? "opacity-100"
+                                                            : "opacity-0"
+                                                    )}
+                                                />
+                                                <span className="truncate">{story.title}</span>
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

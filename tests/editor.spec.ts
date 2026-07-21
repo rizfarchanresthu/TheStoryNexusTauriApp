@@ -112,19 +112,29 @@ test.describe("main Lexical editor", () => {
     }).toContain(marker.trim());
   });
 
-  test("inserts a story fork with two branches", async ({ page }) => {
+  test("inserts a story fork with one branch and can add another", async ({ page }) => {
     await placeCursorAtTopLevelNode(page, 0, "end");
     await insertForkAtSelection(page);
 
-    const after = await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
-    expect(after.topLevelTypes).toContain("fork-group");
-    expect(after.topLevelTypes).toContain("paragraph");
+    const afterInsert = await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    expect(afterInsert.topLevelTypes).toContain("fork-group");
+    expect(afterInsert.topLevelTypes).toContain("paragraph");
 
-    const fork = findFirstFork(after);
+    const fork = findFirstFork(afterInsert);
     expect(fork).toBeTruthy();
     const branches = (fork?.children || []).filter((child) => child.type === "fork-branch");
-    expect(branches).toHaveLength(2);
+    expect(branches).toHaveLength(1);
     await expect(page.getByTestId("fork-chrome").first()).toBeVisible();
+
+    await page.getByTestId("fork-add-branch").first().click();
+    const afterAdd = await waitForEditorSnapshot(page, (snapshot) => {
+      const nextFork = findFirstFork(snapshot);
+      const nextBranches = (nextFork?.children || []).filter((child) => child.type === "fork-branch");
+      return nextBranches.length === 2;
+    });
+    expect(
+      (findFirstFork(afterAdd)?.children || []).filter((child) => child.type === "fork-branch")
+    ).toHaveLength(2);
   });
 
   test("inserts a SceneBeat inside the active fork branch", async ({ page }) => {
@@ -148,6 +158,11 @@ test.describe("main Lexical editor", () => {
     await placeCursorAtTopLevelNode(page, 0, "end");
     await insertForkAtSelection(page);
     await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    await page.getByTestId("fork-add-branch").first().click();
+    await waitForEditorSnapshot(page, (snapshot) => {
+      const fork = findFirstFork(snapshot);
+      return (fork?.children || []).filter((child) => child.type === "fork-branch").length === 2;
+    });
 
     await placeCursorInForkBranch(page, 0, 0);
     await page.keyboard.type("Active branch marker AAA");

@@ -18,10 +18,21 @@ import { $getBlockInsertAnchor } from "../nodes/fork/getBlockInsertAnchor";
 import { $isForkGroupNode } from "../nodes/fork/ForkGroupNode";
 import { $isForkHeaderNode } from "../nodes/fork/ForkHeaderNode";
 import { $isForkBranchNode } from "../nodes/fork/ForkBranchNode";
+import { $insertForkBelowSelection } from "../nodes/fork/insertFork";
 
 function isInsertSceneBeatShortcut(event: KeyboardEvent): boolean {
     return (
         event.code === "KeyS" &&
+        event.altKey &&
+        !event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey
+    );
+}
+
+function isInsertForkShortcut(event: KeyboardEvent): boolean {
+    return (
+        event.code === "KeyB" &&
         event.altKey &&
         !event.shiftKey &&
         !event.metaKey &&
@@ -42,17 +53,24 @@ export function SceneBeatShortcutPlugin() {
         const removeShortcut = editor.registerCommand(
             KEY_MODIFIER_COMMAND,
             (event: KeyboardEvent) => {
-                if (!isInsertSceneBeatShortcut(event)) {
-                    return false;
+                if (isInsertSceneBeatShortcut(event)) {
+                    event.preventDefault();
+                    editor.update(() => {
+                        const nodeKey = $insertSceneBeatBelowSelection();
+                        focusInsertedSceneBeat(nodeKey);
+                    });
+                    return true;
                 }
 
-                event.preventDefault();
-                editor.update(() => {
-                    const nodeKey = $insertSceneBeatBelowSelection();
-                    focusInsertedSceneBeat(nodeKey);
-                });
+                if (isInsertForkShortcut(event)) {
+                    event.preventDefault();
+                    editor.update(() => {
+                        $insertForkBelowSelection();
+                    });
+                    return true;
+                }
 
-                return true;
+                return false;
             },
             COMMAND_PRIORITY_NORMAL
         );

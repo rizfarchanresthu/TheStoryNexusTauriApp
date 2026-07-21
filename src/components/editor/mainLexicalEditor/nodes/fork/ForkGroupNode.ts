@@ -162,7 +162,6 @@ export function $createForkGroupNode(
     options: CreateForkGroupOptions = {}
 ): ForkGroupNode {
     const branchAKey = createId("branch");
-    const branchBKey = createId("branch");
     const fork = new ForkGroupNode(
         options.forkId || createId("fork"),
         branchAKey,
@@ -171,10 +170,7 @@ export function $createForkGroupNode(
 
     if (options.withDefaultBranches !== false) {
         fork.append($createForkHeaderNode());
-        fork.append(
-            $createForkBranchNode(branchAKey, "Path A", true),
-            $createForkBranchNode(branchBKey, "Path B", false)
-        );
+        fork.append($createForkBranchNode(branchAKey, "Path A", true));
     }
 
     return $applyNodeReplacement(fork);

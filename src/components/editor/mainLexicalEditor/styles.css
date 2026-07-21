@@ -332,22 +332,14 @@
 .fork-group-node {
     box-sizing: border-box;
     max-width: 100%;
-    margin: 1rem 0;
-    overflow: hidden;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    background: hsl(var(--card));
-    box-shadow: var(--shadow-glow);
-}
-
-.fork-group-node .fork-group-node {
     margin: 0.75rem 0;
+    overflow: hidden;
     border-style: solid;
     border-width: 0 0 0 3px;
     border-color: transparent transparent transparent hsl(var(--primary) / 0.45);
     border-radius: 0;
-    box-shadow: none;
     background: transparent;
+    box-shadow: none;
 }
 
 .fork-header-node {
@@ -358,7 +350,7 @@
     width: 100%;
 }
 
-.fork-chrome-nested .fork-chrome-track {
+.fork-chrome-track {
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
 }

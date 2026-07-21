@@ -3,6 +3,7 @@ import {
     ChevronLeft,
     ChevronRight,
     GitBranch,
+    Pencil,
     Plus,
     Trash2,
 } from "lucide-react";
@@ -50,7 +51,6 @@ export function ForkChrome({
     const [editingTitle, setEditingTitle] = useState(false);
     const [draftTitle, setDraftTitle] = useState(activeBranch?.title ?? "");
     const dragStartX = useRef(0);
-    const trackRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setDraftTitle(activeBranch?.title ?? "");
@@ -67,6 +67,10 @@ export function ForkChrome({
 
     const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
         if (editingTitle) return;
+        // Ignore presses on interactive children (rename pencil, title button while editing).
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("button, input, a")) return;
+
         event.currentTarget.setPointerCapture(event.pointerId);
         dragStartX.current = event.clientX;
         setIsDragging(true);
@@ -93,14 +97,10 @@ export function ForkChrome({
 
     const peekPrev = branches[activeIndex - 1];
     const peekNext = branches[activeIndex + 1];
-    const nested = depth > 0;
 
     return (
         <div
-            className={cn(
-                "fork-chrome",
-                nested ? "fork-chrome-nested" : "fork-chrome-root"
-            )}
+            className="fork-chrome"
             data-testid="fork-chrome"
             data-fork-depth={depth}
             onKeyDown={(event) => {
@@ -129,6 +129,7 @@ export function ForkChrome({
                         aria-label="Add branch"
                         data-testid="fork-add-branch"
                         onMouseDown={(event) => event.preventDefault()}
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={onAddBranch}
                     >
                         <Plus className="h-3.5 w-3.5" />
@@ -141,6 +142,7 @@ export function ForkChrome({
                         aria-label="Remove fork and keep active branch"
                         data-testid="fork-flatten"
                         onMouseDown={(event) => event.preventDefault()}
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={onFlattenFork}
                     >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -148,15 +150,7 @@ export function ForkChrome({
                 </div>
             </div>
 
-            <div
-                ref={trackRef}
-                className="fork-chrome-track relative select-none touch-pan-y px-3 py-3"
-                data-testid="fork-swipe-track"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={finishDrag}
-                onPointerCancel={finishDrag}
-            >
+            <div className="fork-chrome-track relative px-3 py-3" data-testid="fork-swipe-track">
                 <div className="flex items-center gap-2">
                     <Button
                         type="button"
@@ -166,6 +160,7 @@ export function ForkChrome({
                         aria-label="Previous branch"
                         disabled={activeIndex <= 0}
                         onMouseDown={(event) => event.preventDefault()}
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={() => goToIndex(activeIndex - 1)}
                     >
                         <ChevronLeft className="h-4 w-4" />
@@ -185,10 +180,15 @@ export function ForkChrome({
 
                         <div
                             className={cn(
-                                "flex flex-col items-center justify-center rounded-md border border-border bg-background/80 px-3 py-2 transition-transform",
+                                "flex items-center justify-center gap-1 rounded-md border border-border bg-background/80 px-3 py-2 transition-transform select-none touch-pan-y",
                                 isDragging && "transition-none"
                             )}
                             style={{ transform: `translateX(${dragOffset * 0.35}px)` }}
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={finishDrag}
+                            onPointerCancel={finishDrag}
+                            data-testid="fork-title-card"
                         >
                             {editingTitle ? (
                                 <input
@@ -214,20 +214,32 @@ export function ForkChrome({
                                     onPointerDown={(event) => event.stopPropagation()}
                                 />
                             ) : (
-                                <button
-                                    type="button"
-                                    className="text-sm font-medium"
-                                    data-testid="fork-branch-title"
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onClick={() => setEditingTitle(true)}
-                                    onDoubleClick={() => setEditingTitle(true)}
-                                >
-                                    {activeBranch?.title ?? "Path"}
-                                </button>
+                                <>
+                                    <button
+                                        type="button"
+                                        className="text-sm font-medium"
+                                        data-testid="fork-branch-title"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={() => setEditingTitle(true)}
+                                    >
+                                        {activeBranch?.title ?? "Path"}
+                                    </button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 shrink-0 p-0"
+                                        aria-label="Rename path"
+                                        data-testid="fork-rename-path"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={() => setEditingTitle(true)}
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                </>
                             )}
-                            <div className="mt-1 text-[10px] text-muted-foreground">
-                                {activeIndex + 1} / {branches.length} · drag to switch
-                            </div>
                         </div>
                     </div>
 
@@ -239,6 +251,7 @@ export function ForkChrome({
                         aria-label="Next branch"
                         disabled={activeIndex >= branches.length - 1}
                         onMouseDown={(event) => event.preventDefault()}
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={() => goToIndex(activeIndex + 1)}
                     >
                         <ChevronRight className="h-4 w-4" />
@@ -260,6 +273,7 @@ export function ForkChrome({
                                         : "bg-muted-foreground/40 hover:bg-muted-foreground/70"
                                 )}
                                 onMouseDown={(event) => event.preventDefault()}
+                                onPointerDown={(event) => event.stopPropagation()}
                                 onClick={() => goToIndex(index)}
                             />
                         ))}
@@ -273,6 +287,7 @@ export function ForkChrome({
                             aria-label="Delete this branch"
                             data-testid="fork-delete-branch"
                             onMouseDown={(event) => event.preventDefault()}
+                            onPointerDown={(event) => event.stopPropagation()}
                             onClick={() => onDeleteBranch(activeBranch.key)}
                         >
                             Delete path
