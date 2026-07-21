@@ -14,7 +14,6 @@ import { $getSelectionStyleValueForProperty, $patchStyleText, $setBlocksType } f
 import {
     $createParagraphNode,
     $getSelection,
-    $insertNodes,
     $isRangeSelection,
     CAN_REDO_COMMAND,
     CAN_UNDO_COMMAND,
@@ -30,6 +29,7 @@ import {
     Bold,
     Bot,
     ChevronDown,
+    GitBranch,
     Italic,
     Minus,
     MoreHorizontal,
@@ -52,6 +52,8 @@ import {
 import { cn } from "@/lib/utils";
 import { $insertSceneBeatBelowSelection, focusInsertedSceneBeat } from "../nodes/scene-beat/insertSceneBeat";
 import { $createImageGenerationNode } from "../nodes/ImageGenerationNode";
+import { $insertNodesAfterSelectionAnchor } from "../nodes/fork/getBlockInsertAnchor";
+import { $insertForkBelowSelection } from "../nodes/fork/insertFork";
 
 type BlockType = "paragraph" | "h1" | "h2" | "h3" | "bullet" | "number";
 type FontFamily = "Arial" | "Georgia" | "Times New Roman";
@@ -213,14 +215,15 @@ export function StoryToolbarPlugin() {
 
     const insertImageGeneration = () => {
         editor.update(() => {
-            const selection = $getSelection();
             const imageGenNode = $createImageGenerationNode();
             const paragraphNode = $createParagraphNode();
-            if (selection) {
-                selection.insertNodes([imageGenNode, paragraphNode]);
-            } else {
-                $insertNodes([imageGenNode, paragraphNode]);
-            }
+            $insertNodesAfterSelectionAnchor(imageGenNode, paragraphNode);
+        });
+    };
+
+    const insertFork = () => {
+        editor.update(() => {
+            $insertForkBelowSelection();
         });
     };
 
@@ -375,6 +378,13 @@ export function StoryToolbarPlugin() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             className="cursor-pointer"
+                            onClick={insertFork}
+                        >
+                            <GitBranch className="mr-2 h-4 w-4" />
+                            Story Fork
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            className="cursor-pointer"
                             onClick={insertImageGeneration}
                         >
                             <ImageIcon className="mr-2 h-4 w-4" />
@@ -464,6 +474,13 @@ export function StoryToolbarPlugin() {
                         <Bot className="mr-2 h-4 w-4" />
                         Scene Beat
                         <span className="ml-auto text-xs text-muted-foreground">Alt+S</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        className="sn-main-editor-mobile-menu-item"
+                        onClick={insertFork}
+                    >
+                        <GitBranch className="mr-2 h-4 w-4" />
+                        Story Fork
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         className="sn-main-editor-mobile-menu-item"

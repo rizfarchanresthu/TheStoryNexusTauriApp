@@ -26,10 +26,17 @@ The bridge lets tests assert serialized Lexical state directly:
 - current story/chapter ids
 - paragraph count
 - SceneBeat count
+- fork group count
 - top-level node types
-- plain text
+- plain text (selected fork path only)
 - current selection shape
 - persisted chapter content from IndexedDB
+
+Fork helpers on the bridge:
+
+- `insertForkAtSelection()`
+- `selectForkBranch(forkIndex, branchIndex)`
+- `placeCursorInForkBranch(forkIndex, branchIndex?)`
 
 This keeps the fragile caret cases testable without relying only on DOM snapshots.
 
@@ -42,7 +49,12 @@ This keeps the fragile caret cases testable without relying only on DOM snapshot
 - SceneBeat insertion creates a trailing paragraph
 - Backspace from the empty paragraph after a SceneBeat removes the SceneBeat
 - editor changes autosave back to IndexedDB
+- Story Fork insertion with two branches and visible chrome
+- SceneBeat insertion inside an active fork branch (not as a top-level sibling)
+- switching branches excludes inactive path text from plain text
+- nested forks inside a branch
 
+`tests/unit/selectedPathPlainText.test.ts` covers selected-path JSON → plain text for active/nested forks and skipped SceneBeat nodes.
 ## Next Phase
 
 Phase 2 adds a separate local-LLM project for local OpenAI-compatible runtimes such as LM Studio, Ollama, and llama.cpp.

@@ -4,6 +4,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getRoot } from "lexical";
 
 import { countWordsInText } from "../serialization/lexicalToPlainText";
+import { $collectSelectedPathTextFromNode } from "../nodes/fork/selectedPathText";
 
 type WordCountPluginProps = {
     onChange: (wordCount: number) => void;
@@ -15,7 +16,7 @@ export function WordCountPlugin({ onChange }: WordCountPluginProps) {
     useEffect(() => {
         const updateWordCount = () => {
             editor.getEditorState().read(() => {
-                onChange(countWordsInText($getRoot().getTextContent()));
+                onChange(countWordsInText($collectSelectedPathTextFromNode($getRoot())));
             });
         };
 
@@ -23,7 +24,7 @@ export function WordCountPlugin({ onChange }: WordCountPluginProps) {
 
         return editor.registerUpdateListener(({ editorState }) => {
             editorState.read(() => {
-                onChange(countWordsInText($getRoot().getTextContent()));
+                onChange(countWordsInText($collectSelectedPathTextFromNode($getRoot())));
             });
         });
     }, [editor, onChange]);

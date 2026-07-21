@@ -14,6 +14,10 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 
 import { $isSceneBeatNode } from "../nodes/SceneBeatNode";
 import { $insertSceneBeatBelowSelection, focusInsertedSceneBeat } from "../nodes/scene-beat/insertSceneBeat";
+import { $getBlockInsertAnchor } from "../nodes/fork/getBlockInsertAnchor";
+import { $isForkGroupNode } from "../nodes/fork/ForkGroupNode";
+import { $isForkHeaderNode } from "../nodes/fork/ForkHeaderNode";
+import { $isForkBranchNode } from "../nodes/fork/ForkBranchNode";
 
 function isInsertSceneBeatShortcut(event: KeyboardEvent): boolean {
     return (
@@ -23,6 +27,12 @@ function isInsertSceneBeatShortcut(event: KeyboardEvent): boolean {
         !event.metaKey &&
         !event.ctrlKey
     );
+}
+
+function isParagraphBlockEmpty(blockNode: ReturnType<typeof $getBlockInsertAnchor>): boolean {
+    return !!blockNode &&
+        blockNode.getType() === "paragraph" &&
+        blockNode.getTextContentSize() === 0;
 }
 
 export function SceneBeatShortcutPlugin() {
@@ -56,28 +66,39 @@ export function SceneBeatShortcutPlugin() {
                 }
 
                 const anchorNode = selection.anchor.getNode();
-                const blockNode = anchorNode.getKey() === "root"
-                    ? null
-                    : anchorNode.getTopLevelElementOrThrow();
+                const blockNode = $getBlockInsertAnchor(anchorNode);
 
                 if (
-                    !blockNode ||
-                    blockNode.getType() !== "paragraph" ||
-                    blockNode.getTextContentSize() !== 0 ||
-                    selection.anchor.offset !== 0
+                    !isParagraphBlockEmpty(blockNode) ||
+                    selection.anchor.offset !== 0 ||
+                    !blockNode
                 ) {
                     return false;
                 }
 
                 const previousNode = blockNode.getPreviousSibling();
-                if (!$isSceneBeatNode(previousNode)) {
+
+                // Empty paragraph after SceneBeat → remove SceneBeat
+                if ($isSceneBeatNode(previousNode)) {
+                    event.preventDefault();
+                    previousNode.remove();
+                    blockNode.selectStart();
+                    return true;
+                }
+
+                // Empty first paragraph in a branch with nothing before → leave alone
+                // Empty paragraph immediately after a fork group → remove fork (flatten would lose inactive; just delete empty merge)
+                if ($isForkGroupNode(previousNode)) {
+                    // Don't auto-delete forks on backspace; only remove SceneBeats.
                     return false;
                 }
 
-                event.preventDefault();
-                previousNode.remove();
-                blockNode.selectStart();
-                return true;
+                // Empty paragraph as sole content after fork header inside branch — no-op special
+                if ($isForkHeaderNode(previousNode) || $isForkBranchNode(previousNode)) {
+                    return false;
+                }
+
+                return false;
             },
             COMMAND_PRIORITY_HIGH
         );

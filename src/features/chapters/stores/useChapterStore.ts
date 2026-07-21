@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { db } from '../../../services/database';
 import type { Chapter, ChapterOutline, ChapterNotes } from '../../../types/story';
 import { normalizeChapterContent } from '../utils/emptyChapterContent';
+import { lexicalToSelectedPathPlainText } from '@/components/editor/mainLexicalEditor/nodes/fork/selectedPathFromSerialized';
 
 interface ChapterState {
     chapters: Chapter[];
@@ -297,28 +298,7 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
                 return '';
             }
 
-            // Parse the Lexical state
-            const editorState = JSON.parse(chapter.content);
-            let plainText = '';
-
-            const processNode = (node: any) => {
-                if (node.type === 'text') {
-                    plainText += node.text;
-                } else if (node.children) {
-                    node.children.forEach(processNode);
-                }
-                if (node.type === 'paragraph') {
-                    plainText += '\n\n';
-                }
-            };
-
-            if (editorState.root?.children) {
-                editorState.root.children.forEach(processNode);
-            }
-
-            const finalText = plainText.trim();
-
-            return finalText;
+            return lexicalToSelectedPathPlainText(chapter.content);
         } catch (error) {
             console.error('getChapterPlainText - Failed to parse chapter content:', error);
             return '';

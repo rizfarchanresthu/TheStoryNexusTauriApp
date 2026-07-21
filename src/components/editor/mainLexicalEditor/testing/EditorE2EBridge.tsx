@@ -15,6 +15,12 @@ import { createPromptParser } from "@/features/prompts/services/promptParser";
 import { db } from "@/services/database";
 import type { AISettings } from "@/types/story";
 
+import { $isForkBranchNode } from "../nodes/fork/ForkBranchNode";
+import { $isForkGroupNode } from "../nodes/fork/ForkGroupNode";
+import { $focusFirstSelectableIn } from "../nodes/fork/getBlockInsertAnchor";
+import { $insertForkBelowSelection } from "../nodes/fork/insertFork";
+import { lexicalToSelectedPathPlainText } from "../nodes/fork/selectedPathFromSerialized";
+
 type SerializedLexicalNode = {
     type?: string;
     text?: string;
@@ -38,6 +44,7 @@ export type EditorE2ESnapshot = {
     currentChapterId: string | null;
     paragraphCount: number;
     sceneBeatCount: number;
+    forkGroupCount: number;
     topLevelTypes: string[];
     plainText: string;
     selection: null | {
@@ -62,6 +69,9 @@ export type StoryNexusE2EApi = {
     getPersistedChapterContent: () => Promise<string | null>;
     resolvePromptMessages: (content: string, options?: ResolvePromptMessagesOptions) => Promise<Array<string | null>>;
     placeCursorAtTopLevelNode: (index: number, position?: CursorPosition) => Promise<void>;
+    insertForkAtSelection: () => Promise<void>;
+    selectForkBranch: (forkIndex: number, branchIndex: number) => Promise<void>;
+    placeCursorInForkBranch: (forkIndex: number, branchIndex?: number) => Promise<void>;
     configureLocalLLM: (options: ConfigureLocalLLMOptions) => Promise<void>;
 };
 
@@ -174,6 +184,53 @@ function createApi(
             });
         },
 
+        insertForkAtSelection: async () => {
+            editor.focus();
+            editor.update(() => {
+                $insertForkBelowSelection();
+            });
+        },
+
+        selectForkBranch: async (forkIndex, branchIndex) => {
+            editor.focus();
+            editor.update(() => {
+                const forks = collectForkGroups($getRoot());
+                const fork = forks[forkIndex];
+                if (!fork) {
+                    throw new Error(`No fork group exists at index ${forkIndex}.`);
+                }
+                const branch = fork.getBranchNodes()[branchIndex];
+                if (!branch) {
+                    throw new Error(`No branch exists at index ${branchIndex} on fork ${forkIndex}.`);
+                }
+                fork.setActiveBranchKey(branch.getBranchKey());
+                $focusFirstSelectableIn(branch);
+            });
+        },
+
+        placeCursorInForkBranch: async (forkIndex, branchIndex) => {
+            editor.focus();
+            editor.update(() => {
+                const forks = collectForkGroups($getRoot());
+                const fork = forks[forkIndex];
+                if (!fork) {
+                    throw new Error(`No fork group exists at index ${forkIndex}.`);
+                }
+                const branches = fork.getBranchNodes();
+                const branch =
+                    typeof branchIndex === "number"
+                        ? branches[branchIndex]
+                        : fork.getActiveBranch() || branches[0];
+                if (!branch || !$isForkBranchNode(branch)) {
+                    throw new Error(`No branch available on fork ${forkIndex}.`);
+                }
+                if (!branch.isActiveBranch()) {
+                    fork.setActiveBranchKey(branch.getBranchKey());
+                }
+                $focusFirstSelectableIn(branch);
+            });
+        },
+
         configureLocalLLM: async ({ apiUrl, modelId, modelName }) => {
             const localModel = {
                 id: `local/${modelId.replace(/^local\//, "")}`,
@@ -283,11 +340,28 @@ function readEditorSnapshot(
         currentChapterId: context.getCurrentChapterId(),
         paragraphCount: countNodesByType(rootChildren, "paragraph"),
         sceneBeatCount: countNodesByType(rootChildren, "scene-beat"),
+        forkGroupCount: countNodesByType(rootChildren, "fork-group"),
         topLevelTypes: rootChildren.map((node) => node.type || ""),
-        plainText: collectText(rootChildren).replace(/\s+/g, " ").trim(),
+        plainText: lexicalToSelectedPathPlainText(serializedState as never).replace(/\s+/g, " ").trim(),
         selection,
         state: serializedState,
     };
+}
+
+function collectForkGroups(root: ReturnType<typeof $getRoot>): import("../nodes/fork/ForkGroupNode").ForkGroupNode[] {
+    const forks: import("../nodes/fork/ForkGroupNode").ForkGroupNode[] = [];
+    const visit = (node: import("lexical").LexicalNode) => {
+        if ($isForkGroupNode(node)) {
+            forks.push(node);
+        }
+        if ("getChildren" in node && typeof node.getChildren === "function") {
+            for (const child of node.getChildren()) {
+                visit(child);
+            }
+        }
+    };
+    visit(root);
+    return forks;
 }
 
 function getRootChildren(state: unknown): SerializedLexicalNode[] {

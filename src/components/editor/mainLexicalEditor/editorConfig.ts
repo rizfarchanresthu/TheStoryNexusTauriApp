@@ -6,6 +6,9 @@ import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { SceneBeatNode } from "./nodes/SceneBeatNode";
 import { AssetImageNode } from "./nodes/AssetImageNode";
 import { ImageGenerationNode } from "./nodes/ImageGenerationNode";
+import { ForkBranchNode } from "./nodes/fork/ForkBranchNode";
+import { ForkGroupNode } from "./nodes/fork/ForkGroupNode";
+import { ForkHeaderNode } from "./nodes/fork/ForkHeaderNode";
 import "./styles.css";
 
 const theme: EditorThemeClasses = {
@@ -47,6 +50,9 @@ export const mainLexicalEditorNodes: Array<Klass<LexicalNode>> = [
     SceneBeatNode,
     AssetImageNode,
     ImageGenerationNode,
+    ForkGroupNode,
+    ForkBranchNode,
+    ForkHeaderNode,
 ];
 
 export const mainLexicalEditorConfig = {

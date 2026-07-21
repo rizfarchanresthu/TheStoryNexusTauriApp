@@ -1,15 +1,12 @@
 import { useEffect } from "react";
 
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
-import {
-    $createParagraphNode,
-    $getSelection,
-    $insertNodes,
-} from "lexical";
+import { $createParagraphNode } from "lexical";
 
 import { assetReference } from "@/features/images/services/assetStorage";
 
 import { $createAssetImageNode } from "../nodes/AssetImageNode";
+import { $insertNodesAfterSelectionAnchor } from "../nodes/fork/getBlockInsertAnchor";
 
 export const INSERT_ASSET_IMAGE_EVENT = "story-nexus-insert-asset-image";
 
@@ -34,13 +31,7 @@ export function AssetImageInsertPlugin(): null {
                     maxWidth: 720,
                 });
                 const paragraphNode = $createParagraphNode();
-                const selection = $getSelection();
-
-                if (selection) {
-                    selection.insertNodes([imageNode, paragraphNode]);
-                } else {
-                    $insertNodes([imageNode, paragraphNode]);
-                }
+                $insertNodesAfterSelectionAnchor(imageNode, paragraphNode);
             });
         };
 

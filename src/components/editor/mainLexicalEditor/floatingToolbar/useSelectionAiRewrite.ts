@@ -30,7 +30,7 @@ import type {
     PromptParserConfig,
 } from "@/types/story";
 
-import { $isSceneBeatNode } from "../nodes/SceneBeatNode";
+import { $collectSelectedPathTextBeforeSelection } from "../nodes/fork/selectedPathText";
 
 export function useSelectionAiRewrite() {
     const [editor] = useLexicalComposerContext();
@@ -84,47 +84,7 @@ export function useSelectionAiRewrite() {
         editor.getEditorState().read(() => {
             const selection = $getSelection();
             if (!$isRangeSelection(selection)) return;
-
-            const anchorNode = selection.anchor.getNode();
-            const anchorOffset = selection.anchor.offset;
-            const focusNode = selection.focus.getNode();
-            const focusOffset = selection.focus.offset;
-            const isBackward = selection.isBackward();
-            const startNode = isBackward ? focusNode : anchorNode;
-            const startOffset = isBackward ? focusOffset : anchorOffset;
-
-            const textParts: string[] = [];
-            let reachedStartNode = false;
-
-            const traverseNodes = (node: any): boolean => {
-                if (reachedStartNode) return true;
-                if ($isSceneBeatNode(node)) return false;
-
-                if (node.is(startNode)) {
-                    if ($isTextNode(node)) {
-                        textParts.push(node.getTextContent().substring(0, startOffset));
-                    }
-                    reachedStartNode = true;
-                    return true;
-                }
-
-                if ($isTextNode(node)) {
-                    textParts.push(node.getTextContent());
-                    return false;
-                }
-
-                if (typeof node.getChildren === "function") {
-                    for (const child of node.getChildren()) {
-                        if (traverseNodes(child)) return true;
-                    }
-                }
-
-                return false;
-            };
-
-            const rootNode = editor.getEditorState()._nodeMap.get("root");
-            if (rootNode) traverseNodes(rootNode);
-            previousWords = textParts.join("");
+            previousWords = $collectSelectedPathTextBeforeSelection(selection);
         });
         return previousWords;
     }, [editor]);

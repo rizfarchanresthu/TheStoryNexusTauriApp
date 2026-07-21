@@ -2,13 +2,9 @@ import { useCallback, useRef, useState } from "react";
 
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext.js";
 import {
-    $getRoot,
     $getSelection,
-    $isElementNode,
     $isRangeSelection,
-    $isTextNode,
     $setSelection,
-    type LexicalNode,
     type RangeSelection,
 } from "lexical";
 import { Pencil, Square } from "lucide-react";
@@ -27,7 +23,10 @@ import { useStoryContext } from "@/features/stories/context/StoryContext";
 import { useStoryStore } from "@/features/stories/stores/useStoryStore";
 import type { Prompt, PromptParserConfig } from "@/types/story";
 
-import { $isSceneBeatNode } from "./nodes/SceneBeatNode";
+import {
+    $collectSelectedPathTextAfterSelection,
+    $collectSelectedPathTextBeforeSelection,
+} from "./nodes/fork/selectedPathText";
 import { SIMPLE_WRITE_STREAM_TAG } from "./simpleWrite";
 
 type SimpleWriteButtonProps = {
@@ -65,8 +64,8 @@ export function SimpleWriteButton({ onStreamingChange }: SimpleWriteButtonProps)
 
             hasCursor = true;
             savedSelectionRef.current = selection.clone();
-            previousWords = collectTextBeforeSelection(selection);
-            afterWords = collectTextAfterSelection(selection);
+            previousWords = $collectSelectedPathTextBeforeSelection(selection);
+            afterWords = $collectSelectedPathTextAfterSelection(selection);
         });
 
         return { previousWords, afterWords, hasCursor, hasExpandedSelection };
@@ -267,94 +266,4 @@ function resolveContinueWritingPrompt(
     return useCustomPrompt
         ? savedPrompt || firstCustomPrompt || suppliedPrompt || firstContinueWritingPrompt
         : suppliedPrompt || savedPrompt || firstContinueWritingPrompt;
-}
-
-function collectTextBeforeSelection(selection: RangeSelection): string {
-    const anchorNode = selection.anchor.getNode();
-    const anchorOffset = selection.anchor.offset;
-    const textParts: string[] = [];
-    let reachedAnchor = false;
-
-    const traverse = (node: LexicalNode): boolean => {
-        if (reachedAnchor) return true;
-        if ($isSceneBeatNode(node)) return false;
-
-        if (node.is(anchorNode)) {
-            if ($isTextNode(node)) {
-                textParts.push(node.getTextContent().substring(0, anchorOffset));
-            } else if ($isElementNode(node)) {
-                for (const child of node.getChildren().slice(0, anchorOffset)) {
-                    collectNodeText(child, textParts);
-                }
-            }
-            reachedAnchor = true;
-            return true;
-        }
-
-        if ($isTextNode(node)) {
-            textParts.push(node.getTextContent());
-            return false;
-        }
-
-        if ($isElementNode(node)) {
-            for (const child of node.getChildren()) {
-                if (traverse(child)) return true;
-            }
-        }
-
-        return false;
-    };
-
-    traverse($getRoot());
-    return textParts.join("");
-}
-
-function collectTextAfterSelection(selection: RangeSelection): string {
-    const anchorNode = selection.anchor.getNode();
-    const anchorOffset = selection.anchor.offset;
-    const textParts: string[] = [];
-    let reachedAnchor = false;
-
-    const traverse = (node: LexicalNode): void => {
-        if ($isSceneBeatNode(node)) return;
-
-        if (node.is(anchorNode)) {
-            if ($isTextNode(node)) {
-                textParts.push(node.getTextContent().substring(anchorOffset));
-            } else if ($isElementNode(node)) {
-                for (const child of node.getChildren().slice(anchorOffset)) {
-                    collectNodeText(child, textParts);
-                }
-            }
-            reachedAnchor = true;
-            return;
-        }
-
-        if (reachedAnchor) {
-            collectNodeText(node, textParts);
-            return;
-        }
-
-        if ($isElementNode(node)) {
-            for (const child of node.getChildren()) {
-                traverse(child);
-            }
-        }
-    };
-
-    traverse($getRoot());
-    return textParts.join("");
-}
-
-function collectNodeText(node: LexicalNode, textParts: string[]): void {
-    if ($isSceneBeatNode(node)) return;
-    if ($isTextNode(node)) {
-        textParts.push(node.getTextContent());
-        return;
-    }
-    if ($isElementNode(node)) {
-        for (const child of node.getChildren()) {
-            collectNodeText(child, textParts);
-        }
-    }
 }

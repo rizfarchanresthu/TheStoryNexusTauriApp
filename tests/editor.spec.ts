@@ -7,12 +7,14 @@ type EditorSnapshot = {
   currentChapterId: string | null;
   paragraphCount: number;
   sceneBeatCount: number;
+  forkGroupCount: number;
   topLevelTypes: string[];
   plainText: string;
   selection: null | {
     isRange: boolean;
     isCollapsed: boolean;
   };
+  state?: unknown;
 };
 
 const EXAMPLE_STORY_ID = "example-story-iron-salt";
@@ -108,6 +110,84 @@ test.describe("main Lexical editor", () => {
     await expect.poll(() => getPersistedChapterContent(page), {
       timeout: 8_000,
     }).toContain(marker.trim());
+  });
+
+  test("inserts a story fork with two branches", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+
+    const after = await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    expect(after.topLevelTypes).toContain("fork-group");
+    expect(after.topLevelTypes).toContain("paragraph");
+
+    const fork = findFirstFork(after);
+    expect(fork).toBeTruthy();
+    const branches = (fork?.children || []).filter((child) => child.type === "fork-branch");
+    expect(branches).toHaveLength(2);
+    await expect(page.getByTestId("fork-chrome").first()).toBeVisible();
+  });
+
+  test("inserts a SceneBeat inside the active fork branch", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+
+    await placeCursorInForkBranch(page, 0);
+    await page.keyboard.press("Alt+S");
+
+    const after = await waitForEditorSnapshot(page, (snapshot) => snapshot.sceneBeatCount === 1);
+    expect(after.topLevelTypes.filter((type) => type === "scene-beat")).toHaveLength(0);
+
+    const fork = findFirstFork(after);
+    const activeBranch = findActiveBranch(fork);
+    const branchTypes = collectTypes(activeBranch?.children || []);
+    expect(branchTypes).toContain("scene-beat");
+  });
+
+  test("switches fork branches and keeps inactive path out of plain text", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.type("Active branch marker AAA");
+
+    await selectForkBranch(page, 0, 1);
+    await placeCursorInForkBranch(page, 0, 1);
+    await page.keyboard.type("Inactive branch marker BBB");
+
+    await selectForkBranch(page, 0, 0);
+    const activeSnapshot = await waitForEditorSnapshot(
+      page,
+      (snapshot) => snapshot.plainText.includes("Active branch marker AAA")
+    );
+    expect(activeSnapshot.plainText).toContain("Active branch marker AAA");
+    expect(activeSnapshot.plainText).not.toContain("Inactive branch marker BBB");
+
+    await selectForkBranch(page, 0, 1);
+    const otherSnapshot = await waitForEditorSnapshot(
+      page,
+      (snapshot) => snapshot.plainText.includes("Inactive branch marker BBB")
+    );
+    expect(otherSnapshot.plainText).toContain("Inactive branch marker BBB");
+    expect(otherSnapshot.plainText).not.toContain("Active branch marker AAA");
+  });
+
+  test("supports nested forks inside a branch", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+
+    await placeCursorInForkBranch(page, 0, 0);
+    await insertForkAtSelection(page);
+
+    const after = await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 2);
+    const outer = findFirstFork(after);
+    const nested = (outer?.children || [])
+      .filter((child) => child.type === "fork-branch")
+      .flatMap((branch) => branch.children || [])
+      .find((child) => child.type === "fork-group");
+    expect(nested?.type).toBe("fork-group");
   });
 
   test("resolves chapter_content from the current chapter", async ({ page }) => {
@@ -308,6 +388,80 @@ async function placeCursorAtTopLevelNode(
     },
     { index, position }
   );
+}
+
+async function insertForkAtSelection(page: Page) {
+  await page.evaluate(() => {
+    const api = window.__STORY_NEXUS_E2E__;
+    if (!api) {
+      throw new Error("Story Nexus E2E API is not available.");
+    }
+    return api.insertForkAtSelection();
+  });
+}
+
+async function selectForkBranch(page: Page, forkIndex: number, branchIndex: number) {
+  await page.evaluate(
+    ({ forkIndex, branchIndex }) => {
+      const api = window.__STORY_NEXUS_E2E__;
+      if (!api) {
+        throw new Error("Story Nexus E2E API is not available.");
+      }
+      return api.selectForkBranch(forkIndex, branchIndex);
+    },
+    { forkIndex, branchIndex }
+  );
+}
+
+async function placeCursorInForkBranch(
+  page: Page,
+  forkIndex: number,
+  branchIndex?: number
+) {
+  await page.evaluate(
+    ({ forkIndex, branchIndex }) => {
+      const api = window.__STORY_NEXUS_E2E__;
+      if (!api) {
+        throw new Error("Story Nexus E2E API is not available.");
+      }
+      return api.placeCursorInForkBranch(forkIndex, branchIndex);
+    },
+    { forkIndex, branchIndex }
+  );
+}
+
+type SerializedLexicalNode = {
+  type?: string;
+  text?: string;
+  activeBranchKey?: string;
+  branchKey?: string;
+  active?: boolean;
+  children?: SerializedLexicalNode[];
+};
+
+function findFirstFork(snapshot: EditorSnapshot): SerializedLexicalNode | null {
+  const root = (snapshot.state as { root?: { children?: SerializedLexicalNode[] } })?.root;
+  return (root?.children || []).find((child) => child.type === "fork-group") || null;
+}
+
+function findActiveBranch(fork: SerializedLexicalNode | null): SerializedLexicalNode | null {
+  if (!fork) return null;
+  const branches = (fork.children || []).filter((child) => child.type === "fork-branch");
+  return (
+    branches.find((branch) => branch.branchKey === fork.activeBranchKey) ||
+    branches.find((branch) => branch.active) ||
+    branches[0] ||
+    null
+  );
+}
+
+function collectTypes(nodes: SerializedLexicalNode[]): string[] {
+  const types: string[] = [];
+  for (const node of nodes) {
+    if (node.type) types.push(node.type);
+    if (node.children) types.push(...collectTypes(node.children));
+  }
+  return types;
 }
 
 async function getPersistedChapterContent(page: Page): Promise<string | null> {
