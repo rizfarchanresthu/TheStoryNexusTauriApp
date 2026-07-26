@@ -7,7 +7,7 @@ interface LorebookState {
     entries: LorebookEntry[];
     isLoading: boolean;
     error: string | null;
-    aliasMap: Record<string, LorebookEntry>;
+    aliasMap: Record<string, LorebookEntry[]>;
     buildAliasMap: () => void;
     editorContent: string;
     setEditorContent: (content: string) => void;
@@ -63,17 +63,31 @@ export const useLorebookStore = create<LorebookState>((set, get) => ({
 
     buildAliasMap: () => {
         const { entries } = get();
-        const newAliasMap: Record<string, LorebookEntry> = {};
+        const newAliasMap: Record<string, LorebookEntry[]> = {};
+
+        const addAlias = (alias: string, entry: LorebookEntry) => {
+            const normalizedAlias = alias.toLowerCase().trim();
+            if (!normalizedAlias) return;
+
+            const existing = newAliasMap[normalizedAlias];
+            if (!existing) {
+                newAliasMap[normalizedAlias] = [entry];
+                return;
+            }
+
+            if (!existing.some(mapped => mapped.id === entry.id)) {
+                existing.push(entry);
+            }
+        };
 
         entries.forEach(entry => {
             if (entry.isDisabled) return;
 
-            const normalizedName = entry.name.toLowerCase().trim();
-            newAliasMap[normalizedName] = entry;
+            addAlias(entry.name, entry);
 
             entry.aliases.forEach(alias => {
                 const normalizedAlias = alias.toLowerCase().trim();
-                newAliasMap[normalizedAlias] = entry;
+                addAlias(normalizedAlias, entry);
 
                 if (!normalizedAlias.includes(' ')) {
                     return;
@@ -82,7 +96,7 @@ export const useLorebookStore = create<LorebookState>((set, get) => ({
                 const words = normalizedAlias.split(' ');
                 words.forEach(word => {
                     if (entry.aliases.some(aliasValue => aliasValue.toLowerCase() === word)) {
-                        newAliasMap[word] = entry;
+                        addAlias(word, entry);
                     }
                 });
             });

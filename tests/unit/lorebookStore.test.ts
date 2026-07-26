@@ -28,8 +28,10 @@ describe("useLorebookStore", () => {
     const entry = useLorebookStore.getState().entries[0];
     expect(entry.aliases).toEqual(["Evelyn", "Lady Ashcroft"]);
     expect(entry.tags).toEqual([]);
-    expect(useLorebookStore.getState().aliasMap.evelyn?.id).toBe("legacy-lore");
-    expect(useLorebookStore.getState().aliasMap["lady ashcroft"]?.id).toBe("legacy-lore");
+    expect(useLorebookStore.getState().aliasMap.evelyn?.map((entry) => entry.id)).toEqual(["legacy-lore"]);
+    expect(useLorebookStore.getState().aliasMap["lady ashcroft"]?.map((entry) => entry.id)).toEqual([
+      "legacy-lore",
+    ]);
   });
 
   test("buildAliasMap matches names and aliases, not descriptive tags", () => {
@@ -52,12 +54,41 @@ describe("useLorebookStore", () => {
     useLorebookStore.getState().buildAliasMap();
     const aliasMap = useLorebookStore.getState().aliasMap;
 
-    expect(aliasMap["evelyn ashcroft"]?.id).toBe("entry-1");
-    expect(aliasMap["lady ashcroft"]?.id).toBe("entry-1");
-    expect(aliasMap.ashcroft?.id).toBe("entry-1");
+    expect(aliasMap["evelyn ashcroft"]?.map((entry) => entry.id)).toEqual(["entry-1"]);
+    expect(aliasMap["lady ashcroft"]?.map((entry) => entry.id)).toEqual(["entry-1"]);
+    expect(aliasMap.ashcroft?.map((entry) => entry.id)).toEqual(["entry-1"]);
     expect(aliasMap.lady).toBeUndefined();
     expect(aliasMap.beautiful).toBeUndefined();
     expect(aliasMap.hidden).toBeUndefined();
+  });
+
+  test("buildAliasMap keeps every entry that shares an alias", () => {
+    useLorebookStore.setState({
+      entries: [
+        lore("entry-1", {
+          name: "Red Dragon",
+          aliases: ["dragon"],
+          tags: [],
+        }),
+        lore("entry-2", {
+          name: "Blue Dragon",
+          aliases: ["dragon"],
+          tags: [],
+        }),
+        lore("entry-3", {
+          name: "Dragon Lore",
+          aliases: ["wyrm"],
+          tags: [],
+        }),
+      ],
+    });
+
+    useLorebookStore.getState().buildAliasMap();
+    const aliasMap = useLorebookStore.getState().aliasMap;
+
+    expect(aliasMap.dragon?.map((entry) => entry.id)).toEqual(["entry-1", "entry-2"]);
+    expect(aliasMap["red dragon"]?.map((entry) => entry.id)).toEqual(["entry-1"]);
+    expect(aliasMap.wyrm?.map((entry) => entry.id)).toEqual(["entry-3"]);
   });
 
   test("retrieves aliases and tags separately while excluding disabled entries", () => {
@@ -100,7 +131,7 @@ describe("useLorebookStore", () => {
     });
     const entryId = useLorebookStore.getState().entries[0].id;
 
-    expect(useLorebookStore.getState().aliasMap["the mapmaker"]?.id).toBe(entryId);
+    expect(useLorebookStore.getState().aliasMap["the mapmaker"]?.map((entry) => entry.id)).toEqual([entryId]);
 
     await useLorebookStore.getState().updateEntry(entryId, { isDisabled: true });
     const disabledEntry = await db.lorebookEntries.get(entryId);
@@ -115,7 +146,7 @@ describe("useLorebookStore", () => {
       isDisabled: false,
     });
 
-    expect(useLorebookStore.getState().aliasMap["mara vale"]?.id).toBe(entryId);
+    expect(useLorebookStore.getState().aliasMap["mara vale"]?.map((entry) => entry.id)).toEqual([entryId]);
     expect(useLorebookStore.getState().getEntriesByTag("navigator").map((entry) => entry.id)).toEqual([
       entryId,
     ]);

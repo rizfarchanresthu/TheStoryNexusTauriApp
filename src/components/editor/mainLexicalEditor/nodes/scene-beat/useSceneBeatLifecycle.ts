@@ -368,10 +368,14 @@ export function useSceneBeatLifecycle({
   useEffect(() => {
     const matchAliases = () => {
       const matched = new Map<string, LorebookEntry>();
-      Object.entries(aliasMap).forEach(([alias, entry]) => {
-        if (command.toLowerCase().includes(alias.toLowerCase())) {
-          matched.set(entry.id, entry);
+      const normalizedCommand = command.toLowerCase();
+      Object.entries(aliasMap).forEach(([alias, entries]) => {
+        if (!alias.trim() || !normalizedCommand.includes(alias.toLowerCase())) {
+          return;
         }
+        entries.forEach((entry) => {
+          matched.set(entry.id, entry);
+        });
       });
       set({ localMatchedEntries: matched });
     };

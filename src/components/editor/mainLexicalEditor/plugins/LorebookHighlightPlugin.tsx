@@ -24,10 +24,13 @@ export function LorebookHighlightPlugin(): null {
                 const normalizedContent = content.toLowerCase();
                 const matchedEntries = new Map<string, LorebookEntry>();
 
-                Object.entries(aliasMap).forEach(([alias, entry]) => {
-                    if (alias.trim() && normalizedContent.includes(alias.toLowerCase())) {
-                        matchedEntries.set(entry.id, entry);
+                Object.entries(aliasMap).forEach(([alias, entries]) => {
+                    if (!alias.trim() || !normalizedContent.includes(alias.toLowerCase())) {
+                        return;
                     }
+                    entries.forEach((entry) => {
+                        matchedEntries.set(entry.id, entry);
+                    });
                 });
 
                 setEditorContent(content);
