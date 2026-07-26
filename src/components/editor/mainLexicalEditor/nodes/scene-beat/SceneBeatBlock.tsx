@@ -39,6 +39,9 @@ export function SceneBeatBlock({
     <div
       className="relative my-4 rounded-lg border border-border bg-card overflow-hidden max-w-full"
       data-testid="scene-beat-block"
+      contentEditable={false}
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
       {...{ [SCENE_BEAT_NODE_KEY_ATTR]: nodeKey }}
     >
       <SceneBeatHeader

@@ -142,6 +142,15 @@ export class ForkGroupNode extends ElementNode {
         return false;
     }
 
+    /** Keep fork boundaries from merging with surrounding chapter blocks. */
+    isShadowRoot(): boolean {
+        return true;
+    }
+
+    collapseAtStart(): boolean {
+        return true;
+    }
+
     canInsertTextBefore(): boolean {
         return false;
     }

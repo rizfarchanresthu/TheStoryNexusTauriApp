@@ -65,10 +65,7 @@ export class ForkBranchNode extends ElementNode {
         dom.className = "fork-branch-node";
         dom.setAttribute("data-testid", "fork-branch");
         dom.setAttribute("data-branch-key", this.__branchKey);
-        dom.setAttribute("data-active", this.__active ? "true" : "false");
-        if (!this.__active) {
-            dom.hidden = true;
-        }
+        this.applyActiveDomState(dom, this.__active);
         return dom;
     }
 
@@ -77,10 +74,20 @@ export class ForkBranchNode extends ElementNode {
             dom.setAttribute("data-branch-key", this.__branchKey);
         }
         if (prevNode.__active !== this.__active) {
-            dom.setAttribute("data-active", this.__active ? "true" : "false");
-            dom.hidden = !this.__active;
+            this.applyActiveDomState(dom, this.__active);
         }
         return false;
+    }
+
+    private applyActiveDomState(dom: HTMLElement, active: boolean): void {
+        dom.setAttribute("data-active", active ? "true" : "false");
+        dom.hidden = !active;
+        // Prevent focus/selection from landing in a visually hidden path.
+        if (active) {
+            dom.removeAttribute("inert");
+        } else {
+            dom.setAttribute("inert", "");
+        }
     }
 
     getBranchKey(): string {
@@ -111,6 +118,19 @@ export class ForkBranchNode extends ElementNode {
 
     isInline(): false {
         return false;
+    }
+
+    /**
+     * Isolate each path so backspace/delete cannot merge Path B into Path A
+     * (or vice versa). Same pattern as Lexical table cells.
+     */
+    isShadowRoot(): boolean {
+        return true;
+    }
+
+    /** Keep the branch container when backspacing at the start of its first block. */
+    collapseAtStart(): boolean {
+        return true;
     }
 
     canInsertTextBefore(): boolean {

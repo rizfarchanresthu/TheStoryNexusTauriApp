@@ -61,6 +61,32 @@ test.describe("main Lexical editor", () => {
     expect(after.topLevelTypes[2]).toBe("paragraph");
   });
 
+  test("keeps Enter newlines inside the SceneBeat command field", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await page.keyboard.press("Alt+S");
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.sceneBeatCount === 1);
+
+    const before = await getEditorSnapshot(page);
+    const command = page.getByTestId("scene-beat-command");
+
+    // Reproduce the flaky path: chapter selection after the SceneBeat, then
+    // focus the command field so Lexical still has a RangeSelection.
+    await placeCursorAtTopLevelNode(page, 2, "start");
+    await command.click();
+    await command.fill("line one");
+    await command.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("line two");
+
+    await expect(command).toHaveValue("line one\nline two");
+
+    const after = await getEditorSnapshot(page);
+    expect(after.paragraphCount).toBe(before.paragraphCount);
+    expect(after.topLevelTypes.filter((type) => type === "paragraph").length).toBe(
+      before.topLevelTypes.filter((type) => type === "paragraph").length
+    );
+  });
+
   test("Backspace from an empty paragraph after a SceneBeat removes only the SceneBeat", async ({ page }) => {
     const before = await getEditorSnapshot(page);
 
@@ -186,6 +212,52 @@ test.describe("main Lexical editor", () => {
     );
     expect(otherSnapshot.plainText).toContain("Inactive branch marker BBB");
     expect(otherSnapshot.plainText).not.toContain("Active branch marker AAA");
+  });
+
+  test("keeps sibling fork paths isolated across backspace and SceneBeat insert", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    await page.getByTestId("fork-add-branch").first().click();
+    await waitForEditorSnapshot(page, (snapshot) => {
+      const fork = findFirstFork(snapshot);
+      return (fork?.children || []).filter((child) => child.type === "fork-branch").length === 2;
+    });
+
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.type("PathA-only");
+
+    await selectForkBranch(page, 0, 1);
+    await placeCursorInForkBranch(page, 0, 1);
+    await page.keyboard.type("PathB-only");
+
+    // Backspace at end of Path A must not swallow Path B.
+    await selectForkBranch(page, 0, 0);
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.press("End");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+
+    let snapshot = await getEditorSnapshot(page);
+    let fork = findFirstFork(snapshot);
+    expect((fork?.children || []).filter((child) => child.type === "fork-branch")).toHaveLength(2);
+    expect(collectSerializedText(findBranch(fork, 1)!)).toContain("PathB-only");
+
+    // After visiting Path B, SceneBeat inserted on Path A must stay on Path A.
+    await selectForkBranch(page, 0, 1);
+    await placeCursorInForkBranch(page, 0, 1);
+    await selectForkBranch(page, 0, 0);
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.press("Alt+S");
+
+    snapshot = await waitForEditorSnapshot(page, (next) => next.sceneBeatCount === 1);
+    fork = findFirstFork(snapshot);
+    const pathA = findBranch(fork, 0);
+    const pathB = findBranch(fork, 1);
+    expect(collectTypes(pathA?.children || [])).toContain("scene-beat");
+    expect(collectTypes(pathB?.children || [])).not.toContain("scene-beat");
+    expect((fork?.children || []).filter((child) => child.type === "fork-branch")).toHaveLength(2);
   });
 
   test("supports nested forks inside a branch", async ({ page }) => {
@@ -393,6 +465,11 @@ async function placeCursorAtTopLevelNode(
   index: number,
   position: "start" | "end"
 ) {
+  // SceneBeat insert focuses its command textarea. Keyboard actions must hit
+  // the chapter ContentEditable, so refocus it after moving Lexical selection.
+  const visibleEditor = page.locator(`${CHAPTER_EDITOR}:visible`).first();
+  await visibleEditor.focus();
+
   await page.evaluate(
     ({ index, position }) => {
       const api = window.__STORY_NEXUS_E2E__;
@@ -403,6 +480,10 @@ async function placeCursorAtTopLevelNode(
     },
     { index, position }
   );
+
+  await expect.poll(() => getActiveElementInfo(page)).toMatchObject({
+    ariaLabel: "Chapter editor",
+  });
 }
 
 async function insertForkAtSelection(page: Page) {
@@ -468,6 +549,15 @@ function findActiveBranch(fork: SerializedLexicalNode | null): SerializedLexical
     branches[0] ||
     null
   );
+}
+
+function findBranch(
+  fork: SerializedLexicalNode | null,
+  index: number
+): SerializedLexicalNode | null {
+  if (!fork) return null;
+  const branches = (fork.children || []).filter((child) => child.type === "fork-branch");
+  return branches[index] || null;
 }
 
 function collectTypes(nodes: SerializedLexicalNode[]): string[] {

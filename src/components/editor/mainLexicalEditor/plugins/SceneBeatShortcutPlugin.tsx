@@ -3,10 +3,13 @@ import { useEffect } from "react";
 import {
     $getSelection,
     $isRangeSelection,
+    $isSelectionCapturedInDecoratorInput,
     COMMAND_PRIORITY_EDITOR,
     COMMAND_PRIORITY_HIGH,
     COMMAND_PRIORITY_NORMAL,
+    isDOMNode,
     KEY_BACKSPACE_COMMAND,
+    KEY_ENTER_COMMAND,
     KEY_MODIFIER_COMMAND,
     KEY_TAB_COMMAND,
 } from "lexical";
@@ -19,6 +22,19 @@ import { $isForkGroupNode } from "../nodes/fork/ForkGroupNode";
 import { $isForkHeaderNode } from "../nodes/fork/ForkHeaderNode";
 import { $isForkBranchNode } from "../nodes/fork/ForkBranchNode";
 import { $insertForkBelowSelection } from "../nodes/fork/insertFork";
+
+/**
+ * True when the event targets a nested INPUT/TEXTAREA inside a DecoratorNode
+ * (SceneBeat command field, image prompt, etc.). Lexical still sees bubbled
+ * keydowns from those controls; rich-text's KEY_ENTER handler will otherwise
+ * preventDefault and insert a paragraph under the decorator.
+ */
+function isDecoratorInputEvent(event: KeyboardEvent | null | undefined): boolean {
+    if (!event || !isDOMNode(event.target) || !(event.target instanceof HTMLElement)) {
+        return false;
+    }
+    return $isSelectionCapturedInDecoratorInput(event.target, event.target);
+}
 
 function isInsertSceneBeatShortcut(event: KeyboardEvent): boolean {
     return (
@@ -75,6 +91,19 @@ export function SceneBeatShortcutPlugin() {
             COMMAND_PRIORITY_NORMAL
         );
 
+        // Let Enter create a newline inside decorator inputs instead of a
+        // paragraph below the SceneBeat / image node.
+        const removeEnterPassthrough = editor.registerCommand(
+            KEY_ENTER_COMMAND,
+            (event: KeyboardEvent | null) => {
+                if (isDecoratorInputEvent(event)) {
+                    return true;
+                }
+                return false;
+            },
+            COMMAND_PRIORITY_HIGH
+        );
+
         const removeBackspace = editor.registerCommand(
             KEY_BACKSPACE_COMMAND,
             (event: KeyboardEvent) => {
@@ -124,6 +153,10 @@ export function SceneBeatShortcutPlugin() {
         const removeTabFocusMove = editor.registerCommand(
             KEY_TAB_COMMAND,
             (event: KeyboardEvent) => {
+                if (isDecoratorInputEvent(event)) {
+                    return false;
+                }
+
                 if (event.altKey || event.ctrlKey || event.metaKey) {
                     return false;
                 }
@@ -144,6 +177,7 @@ export function SceneBeatShortcutPlugin() {
 
         return () => {
             removeShortcut();
+            removeEnterPassthrough();
             removeBackspace();
             removeTabFocusMove();
         };
