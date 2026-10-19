@@ -363,7 +363,7 @@ export default function PromptGuide() {
                                         </tr>
                                         <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;brainstorm_context&#125;&#125;</td>
-                                            <td className="border p-2">Selected chapter summaries, chapter text, and lorebook entries from the Brainstorm context panel</td>
+                                            <td className="border p-2">Selected chapter summaries, chapter outlines, chapter text, and lorebook entries from the Brainstorm context panel</td>
                                         </tr>
                                         <tr>
                                             <td className="border p-2 font-mono text-sm">&#123;&#123;matched_entries_chapter&#125;&#125;</td>

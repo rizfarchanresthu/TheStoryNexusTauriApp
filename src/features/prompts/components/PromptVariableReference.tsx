@@ -256,7 +256,7 @@ const VARIABLE_GROUPS: PromptVariableGroup[] = [
             {
                 token: "{{brainstorm_context}}",
                 label: "Brainstorm context",
-                description: "Selected context from the Brainstorm panel.",
+                description: "Selected summaries, outlines, chapter text, and lorebook entries from the Brainstorm panel.",
                 availability: ["Brainstorm"],
             },
             {

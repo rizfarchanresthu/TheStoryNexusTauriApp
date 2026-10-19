@@ -12,6 +12,7 @@ export interface BrainstormPinnedSession {
     selectedSummaryIds: string[];
     selectedLorebookEntryIds: string[];
     selectedChapterContentIds: string[];
+    selectedOutlineIds: string[];
     structuredOutputMode: BrainstormOutputMode;
     agenticMode: boolean;
     selectedPipelineId?: string;

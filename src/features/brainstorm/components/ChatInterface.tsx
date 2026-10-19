@@ -67,6 +67,7 @@ import {
   parseBrainstormStructuredOutput,
   STRUCTURED_OUTPUT_OPTIONS,
 } from "@/features/brainstorm/utils/structuredOutput";
+import { formatChapterOutlineContext } from "@/features/brainstorm/utils/formatChapterOutlineContext";
 
 interface ChatInterfaceProps {
   storyId: string;
@@ -121,6 +122,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
   const [selectedChapterContent, setSelectedChapterContent] = useState<
     string[]
   >([]);
+  const [selectedOutlines, setSelectedOutlines] = useState<string[]>([]);
 
   // Agentic mode state
   const [agenticMode, setAgenticMode] = useState(false);
@@ -226,6 +228,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
       selectedSummaryIds: selectedSummaries,
       selectedLorebookEntryIds: selectedItems.map((item) => item.id),
       selectedChapterContentIds: selectedChapterContent,
+      selectedOutlineIds: selectedOutlines,
       structuredOutputMode,
       agenticMode,
       selectedPipelineId:
@@ -282,6 +285,8 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     // Reset context selections when story changes
     setSelectedItems([]);
     setSelectedSummaries([]);
+    setSelectedChapterContent([]);
+    setSelectedOutlines([]);
     setIncludeFullContext(false);
 
     loadData();
@@ -340,8 +345,9 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
 
     const hasPendingPrompt = !!pinnedSession.selectedPromptId && prompts.length === 0;
     const summaryIds = pinnedSession.selectedSummaryIds.filter((id) => id !== "all");
+    const outlineIds = (pinnedSession.selectedOutlineIds ?? []).filter((id) => id !== "all");
     const hasPendingChapters =
-      (summaryIds.length > 0 || pinnedSession.selectedChapterContentIds.length > 0) &&
+      (summaryIds.length > 0 || pinnedSession.selectedChapterContentIds.length > 0 || outlineIds.length > 0) &&
       chapters.length === 0;
     const hasPendingLorebook =
       pinnedSession.selectedLorebookEntryIds.length > 0 &&
@@ -359,6 +365,9 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     const selectedChapterContentIds = pinnedSession.selectedChapterContentIds.filter((id) =>
       chapterIds.has(id)
     );
+    const selectedOutlineIds = (pinnedSession.selectedOutlineIds ?? []).filter(
+      (id) => id === "all" || chapterIds.has(id)
+    );
     const lorebookIds = new Set(pinnedSession.selectedLorebookEntryIds);
     const selectedLorebookEntries = lorebookEntries.filter((entry) => lorebookIds.has(entry.id));
 
@@ -371,6 +380,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     setIncludeAllLorebook(pinnedSession.includeFullContext ? false : pinnedSession.includeAllLorebook);
     setSelectedSummaries(pinnedSession.includeFullContext ? [] : selectedSummaryIds);
     setSelectedChapterContent(pinnedSession.includeFullContext ? [] : selectedChapterContentIds);
+    setSelectedOutlines(pinnedSession.includeFullContext ? [] : selectedOutlineIds);
     setSelectedItems(pinnedSession.includeFullContext ? [] : selectedLorebookEntries);
     setStructuredOutputMode(pinnedSession.structuredOutputMode);
     setAgenticMode(pinnedSession.agenticMode);
@@ -413,6 +423,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     pinnedChapterId,
     selectedChapterContent,
     selectedItems,
+    selectedOutlines,
     selectedModel,
     selectedPipeline,
     selectedPrompt,
@@ -443,7 +454,10 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
 
   // Check if any context is selected
   const anyContextSelected =
-    selectedSummaries.length > 0 || selectedItems.length > 0;
+    selectedSummaries.length > 0 ||
+    selectedItems.length > 0 ||
+    selectedChapterContent.length > 0 ||
+    selectedOutlines.length > 0;
 
   // Toggle full context
   const toggleIncludeFullContext = () => {
@@ -456,11 +470,13 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
       setSelectedSummaries([]);
       setSelectedItems([]);
       setSelectedChapterContent([]);
+      setSelectedOutlines([]);
     } else {
       // If turning off full context, clear all selections
       setSelectedSummaries([]);
       setSelectedItems([]);
       setSelectedChapterContent([]);
+      setSelectedOutlines([]);
     }
   };
 
@@ -493,6 +509,24 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     );
   };
 
+  const handleOutlineSelect = (chapterId: string) => {
+    if (chapterId === "all") {
+      setSelectedOutlines(["all"]);
+      return;
+    }
+
+    if (!selectedOutlines.includes(chapterId)) {
+      setSelectedOutlines([
+        ...selectedOutlines.filter((id) => id !== "all"),
+        chapterId,
+      ]);
+    }
+  };
+
+  const removeOutline = (chapterId: string) => {
+    setSelectedOutlines(selectedOutlines.filter((id) => id !== chapterId));
+  };
+
   // Create prompt config for brainstorming
   const createPromptConfig = (
     prompt: Prompt,
@@ -516,6 +550,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
         selectedChapterContent: includeFullContext
           ? []
           : selectedChapterContent,
+        selectedOutlines: includeFullContext ? [] : selectedOutlines,
         enableWebSearch,
         structuredOutputMode: outputMode,
       },
@@ -580,6 +615,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
     selectedSummaries,
     selectedItems,
     selectedChapterContent,
+    selectedOutlines,
     input,
     structuredOutputMode,
   ]);
@@ -783,6 +819,16 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
           })
         );
         previousWords = chapterContents.filter(Boolean).join("\n\n");
+      }
+
+      const outlineChapters = includeFullContext || selectedOutlines.includes("all")
+        ? chapters
+        : selectedOutlines
+            .map((id) => chapters.find((chapter) => chapter.id === id))
+            .filter((chapter): chapter is Chapter => Boolean(chapter));
+      const outlineText = formatChapterOutlineContext(outlineChapters);
+      if (outlineText) {
+        previousWords = previousWords ? `${previousWords}\n\n${outlineText}` : outlineText;
       }
 
       // Create assistant message placeholder
@@ -1097,6 +1143,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
       setSelectedSummaries([]);
       setSelectedItems([]);
       setSelectedChapterContent([]);
+      setSelectedOutlines([]);
     }
   }, [includeFullContext]);
 
@@ -1160,6 +1207,7 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
           selectedChapterContent: includeFullContext
             ? []
             : selectedChapterContent,
+          selectedOutlines: includeFullContext ? [] : selectedOutlines,
           structuredOutputMode: regenerateOutputMode,
         },
       };
@@ -1447,6 +1495,13 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                         : `${selectedSummaries.length} ${selectedSummaries.length === 1 ? "Summary" : "Summaries"}`}
                     </Badge>
                   )}
+                  {selectedOutlines.length > 0 && (
+                    <Badge variant="outline" className="mr-2">
+                      {selectedOutlines.includes("all")
+                        ? "All Outlines"
+                        : `${selectedOutlines.length} ${selectedOutlines.length === 1 ? "Outline" : "Outlines"}`}
+                    </Badge>
+                  )}
                   {selectedItems.length > 0 && (
                     <Badge variant="outline" className="mr-2">
                       {selectedItems.length} Lorebook{" "}
@@ -1467,8 +1522,8 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                       className="data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted-foreground/30"
                     />
                     <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
-                      When enabled, all lorebook entries and chapter summaries will
-                      be included
+                      When enabled, all lorebook entries, chapter summaries, and
+                      chapter outlines will be included
                     </div>
                   </div>
                 </div>
@@ -1590,6 +1645,54 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                           Chapter {chapter.order}: {chapter.title}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1 min-w-[200px]">
+                  <div className="text-sm font-medium mb-1">
+                    Chapter Outlines
+                  </div>
+                  <Select
+                    onValueChange={(value) => {
+                      handleOutlineSelect(value);
+                      const selectElement = document.querySelector(
+                        '[data-chapter-outline-select="true"]'
+                      );
+                      if (selectElement) {
+                        (selectElement as HTMLSelectElement).value = "";
+                      }
+                    }}
+                    disabled={includeFullContext}
+                    value=""
+                  >
+                    <SelectTrigger
+                      className="w-full"
+                      data-chapter-outline-select="true"
+                    >
+                      <SelectValue placeholder="Select chapter outline" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value="all"
+                        disabled={selectedOutlines.includes("all")}
+                      >
+                        All Outlines
+                      </SelectItem>
+                      {chapters
+                        .filter((chapter) => chapter.outline?.content?.trim())
+                        .map((chapter) => (
+                          <SelectItem
+                            key={chapter.id}
+                            value={chapter.id}
+                            disabled={
+                              selectedOutlines.includes(chapter.id) ||
+                              selectedOutlines.includes("all")
+                            }
+                          >
+                            Chapter {chapter.order}: {chapter.title}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1719,6 +1822,47 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                     );
                   })}
 
+                  {selectedOutlines.map((outlineId) => {
+                    if (outlineId === "all") {
+                      return (
+                        <Badge
+                          key={outlineId}
+                          variant="secondary"
+                          className="flex items-center gap-1 px-3 py-1"
+                        >
+                          All Outlines
+                          <button
+                            type="button"
+                            onClick={() => removeOutline(outlineId)}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    }
+
+                    const chapter = chapters.find((c) => c.id === outlineId);
+                    if (!chapter) return null;
+
+                    return (
+                      <Badge
+                        key={outlineId}
+                        variant="secondary"
+                        className="flex items-center gap-1 px-3 py-1"
+                      >
+                        Ch. {chapter.order} Outline
+                        <button
+                          type="button"
+                          onClick={() => removeOutline(outlineId)}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+
                   {/* Lorebook item badges */}
                   {selectedItems.map((item) => (
                     <Badge
@@ -1737,7 +1881,10 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                     </Badge>
                   ))}
 
-                  {!selectedSummaries.length && !selectedItems.length && (
+                  {!selectedSummaries.length &&
+                    !selectedItems.length &&
+                    !selectedChapterContent.length &&
+                    !selectedOutlines.length && (
                     <div className="text-muted-foreground text-sm">
                       No items selected
                     </div>

@@ -40,7 +40,7 @@ export default function BrainstormGuide() {
                         Context And Prompts
                     </h3>
                     <p className="text-muted-foreground">
-                        Brainstorm can include chapter summaries, chapter content, lorebook entries, full story context, and web search. Normal mode uses brainstorm prompts and models. Prompt Defaults can preselect your preferred brainstorm prompt and model.
+                        Brainstorm can include chapter summaries, chapter outlines, chapter content, lorebook entries, full story context, and web search. Normal mode uses brainstorm prompts and models. Prompt Defaults can preselect your preferred brainstorm prompt and model.
                     </p>
                 </section>
 

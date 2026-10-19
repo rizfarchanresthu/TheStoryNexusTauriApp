@@ -173,6 +173,61 @@ describe("PromptParser", () => {
     expect(result.messages[0].content).toContain("MAGIC SYSTEM: Wand Magic");
     expect(result.messages[0].content).toContain("WORLD RULE: Statute of Secrecy");
   });
+
+  test("resolves selected chapter outlines in brainstorm_context", async () => {
+    await addPrompt("Context:\n{{brainstorm_context}}");
+    await addOutlinedChapters();
+
+    const result = await createPromptParser().parse({
+      promptId: "unit-prompt",
+      storyId: "story-1",
+      additionalContext: {
+        selectedOutlines: ["ch-1"],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.messages[0].content).toContain("Chapter Outlines:");
+    expect(result.messages[0].content).toContain("Chapter 1 Outline (Crossing)");
+    expect(result.messages[0].content).toContain("## Beats\n- Arrival");
+    expect(result.messages[0].content).not.toContain("Return");
+  });
+
+  test("resolves all chapter outlines in brainstorm_context", async () => {
+    await addPrompt("Context:\n{{brainstorm_context}}");
+    await addOutlinedChapters();
+
+    const result = await createPromptParser().parse({
+      promptId: "unit-prompt",
+      storyId: "story-1",
+      additionalContext: {
+        selectedOutlines: ["all"],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.messages[0].content).toContain("Chapter 1 Outline (Crossing)");
+    expect(result.messages[0].content).toContain("Chapter 2 Outline (Return)");
+    expect(result.messages[0].content).not.toContain("Chapter 3 Outline");
+  });
+
+  test("includes chapter outlines in full brainstorm context", async () => {
+    await addPrompt("Context:\n{{brainstorm_context}}");
+    await addOutlinedChapters();
+
+    const result = await createPromptParser().parse({
+      promptId: "unit-prompt",
+      storyId: "story-1",
+      additionalContext: {
+        includeFullContext: true,
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.messages[0].content).toContain("Chapter Outlines:");
+    expect(result.messages[0].content).toContain("Chapter 1 Outline (Crossing)");
+    expect(result.messages[0].content).toContain("Chapter 2 Outline (Return)");
+  });
 });
 
 async function addPrompt(content: string): Promise<void> {
@@ -186,6 +241,40 @@ async function addPrompt(content: string): Promise<void> {
   };
 
   await db.prompts.add(prompt);
+}
+
+async function addOutlinedChapters(): Promise<void> {
+  await db.chapters.bulkAdd([
+    {
+      id: "ch-1",
+      createdAt: new Date(),
+      storyId: "story-1",
+      title: "Crossing",
+      order: 1,
+      content: "",
+      wordCount: 0,
+      outline: { content: "## Beats\n- Arrival", lastUpdated: new Date() },
+    },
+    {
+      id: "ch-2",
+      createdAt: new Date(),
+      storyId: "story-1",
+      title: "Return",
+      order: 2,
+      content: "",
+      wordCount: 0,
+      outline: { content: "## Beats\n- Reversal", lastUpdated: new Date() },
+    },
+    {
+      id: "ch-3",
+      createdAt: new Date(),
+      storyId: "story-1",
+      title: "Empty",
+      order: 3,
+      content: "",
+      wordCount: 0,
+    },
+  ]);
 }
 
 function lorebookEntry(overrides: Partial<LorebookEntry>): LorebookEntry {
