@@ -299,29 +299,7 @@ export const useChapterStore = create<ChapterState>((set, get) => ({
                 return '';
             }
 
-            // Parse the Lexical state
-            const editorState = JSON.parse(getChapterContentForReading(chapter));
-            let plainText = '';
-
-            const processNode = (node: any) => {
-                if (node.disabled) return;
-                if (node.type === 'text') {
-                    plainText += node.text;
-                } else if (node.children) {
-                    node.children.forEach(processNode);
-                }
-                if (node.type === 'paragraph') {
-                    plainText += '\n\n';
-                }
-            };
-
-            if (editorState.root?.children) {
-                editorState.root.children.forEach(processNode);
-            }
-
-            const finalText = plainText.trim();
-
-            return finalText;
+            return lexicalToPlainText(getChapterContentForReading(chapter));
         } catch (error) {
             console.error('getChapterPlainText - Failed to parse chapter content:', error);
             return '';

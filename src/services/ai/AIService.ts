@@ -45,6 +45,12 @@ export class AIService {
         return this.initializePromise;
     }
 
+    /** Load settings from IndexedDB when callers skip explicit initialize (e.g. Agentic after reload). */
+    private async ensureInitialized(): Promise<void> {
+        if (this.settings) return;
+        await this.initialize();
+    }
+
     private async initializeInternal() {
         // Load or create settings
         const settings = await db.aiSettings.toArray();
@@ -466,6 +472,7 @@ export class AIService {
         modelId?: string,
         reasoning?: PromptReasoningSettings
     ): Promise<Response> {
+        await this.ensureInitialized();
         if (!this.settings) throw new Error('AIService not initialized');
         await validateImageModel(messages, this.getGenerationModel({ provider: 'local', id: modelId || 'local', name: modelId || 'Local model' }), this.settings);
 
@@ -745,6 +752,7 @@ export class AIService {
         tools?: any[],
         reasoning?: PromptReasoningSettings
     ): Promise<Response> {
+        await this.ensureInitialized();
         if (!this.settings?.openaiKey) {
             throw new Error('OpenAI API key not set');
         }
@@ -838,6 +846,7 @@ export class AIService {
         tools?: any[],
         reasoning?: PromptReasoningSettings
     ): Promise<Response> {
+        await this.ensureInitialized();
         if (!this.settings?.openrouterKey) {
             throw new Error('OpenRouter API key not set');
         }
@@ -930,6 +939,7 @@ export class AIService {
         tools?: any[],
         reasoning?: PromptReasoningSettings
     ): Promise<Response> {
+        await this.ensureInitialized();
         if (!this.settings?.nanogptKey) {
             throw new Error('NanoGPT API key not set');
         }
@@ -1014,6 +1024,7 @@ export class AIService {
         tools?: any[],
         reasoning?: PromptReasoningSettings
     ): Promise<Response> {
+        await this.ensureInitialized();
         if (!this.settings?.openaiCompatibleKey || !this.settings?.openaiCompatibleUrl) {
             throw new Error('OpenAI-compatible provider not configured');
         }
@@ -1071,6 +1082,7 @@ export class AIService {
         repetition_penalty?: number,
         min_p?: number
     ): Promise<Response> {
+        await this.ensureInitialized();
         if (!this.settings?.googleKey) {
             throw new Error('Google AI API key not set');
         }

@@ -1,8 +1,8 @@
 # Lexical Editor Checkpoint
 
-Date: 2026-05-18
+Date: 2026-07-21
 
-This checkpoint records the current state after the clean editor migration and the removal of the old Lexical playground runtime.
+This checkpoint records the current state after the clean editor migration and the addition of recursive story forks.
 
 ## Current State
 
@@ -10,7 +10,8 @@ This checkpoint records the current state after the clean editor migration and t
 - `src/Lexical/lexical-playground` has been removed.
 - Stale playground aliases were removed from `tsconfig.json` and `vite.config.ts`.
 - `src/Lexical/shared` still exists as a separate legacy helper folder, but there are no active runtime imports from the deleted playground.
-- `npm.cmd run build` passes after the playground deletion.
+- Story forks are recursive `ElementNode` containers (`fork-group` / `fork-branch`) with swipeable chrome; SceneBeats remain `DecoratorNode`s and work inside active branches.
+- AI previous/after words and chapter plain text follow only the **selected** branch at each fork.
 
 ## Important Editor Paths
 
@@ -23,8 +24,22 @@ This checkpoint records the current state after the clean editor migration and t
 | Slash commands          | `src/components/editor/mainLexicalEditor/plugins/SlashCommandPlugin.tsx`      |
 | SceneBeat node          | `src/components/editor/mainLexicalEditor/nodes/SceneBeatNode.tsx`             |
 | SceneBeat block UI      | `src/components/editor/mainLexicalEditor/nodes/scene-beat/`                   |
+| Story forks             | `src/components/editor/mainLexicalEditor/nodes/fork/`                         |
+| Fork chrome plugin      | `src/components/editor/mainLexicalEditor/nodes/fork/ForkChromePlugin.tsx`     |
+| Selection-aware inserts | `src/components/editor/mainLexicalEditor/nodes/fork/getBlockInsertAnchor.ts`  |
+| Selected-path text      | `src/components/editor/mainLexicalEditor/nodes/fork/selectedPathText.ts`      |
 | Lorebook highlights     | `src/components/editor/mainLexicalEditor/plugins/LorebookHighlightPlugin.tsx` |
 | Serialization helpers   | `src/components/editor/mainLexicalEditor/serialization/`                      |
+
+## Story forks
+
+- Insert via toolbar **Insert → Story Fork**, slash `/fork`, or the E2E bridge.
+- A fork owns sibling branches; only the active branch is visible and included in AI context.
+- Nested forks are allowed inside a branch. Nested chrome uses a left accent rail instead of stacked padded cards.
+- Branch switching: drag the swipe track left/right, chevrons, or dots. Switching focuses the caret in the newly active branch.
+- Fork chrome actions only: add branch, rename, delete branch, flatten fork (keeps active branch content).
+- Global Story toolbar (SceneBeat, headings, images, etc.) targets the caret container — inside an active branch or outside the fork.
+- `$getBlockInsertAnchor` / `$insertNodesAfterSelectionAnchor` replace `getTopLevelElementOrThrow()` for SceneBeat, image, asset-image, and fork inserts so nested inserts stay inside the branch.
 
 ## Recent Fixes
 
@@ -37,40 +52,18 @@ This checkpoint records the current state after the clean editor migration and t
 - Prompt selector and multi-model chips received contrast/readability fixes.
 - Seeded example story content now splits Markdown paragraphs correctly with Windows line endings.
 - Existing demo seed chapters are repaired on startup when their stored text still matches the seed and has the old malformed paragraph shape.
-- Backspace from an empty paragraph immediately after a SceneBeat removes the SceneBeat and preserves a visible editor selection.
-
-## Manual Browser Verification Done
-
-The app was tested against the existing dev server at `http://127.0.0.1:1420/`.
-
-Verified manually/in browser:
-
-- The seeded example story no longer loads Chapter One as one enormous paragraph.
-- Enter behavior in the repaired seeded story no longer exhibits the original giant-paragraph cursor issue.
-- The SceneBeat empty-paragraph Backspace bug was reproduced before the fix, then manually confirmed resolved afterward.
-
-Build verification:
-
-```powershell
-npm.cmd run build
-```
-
-passes.
+- Backspace from an empty paragraph immediately after a SceneBeat removes the SceneBeat and preserves a visible editor selection (also works when the SceneBeat lives inside a fork branch).
 
 ## Known Testing Gap
 
-Browser automation for Lexical caret placement is brittle. DOM snapshots can confirm structure and selection state, but exact caret placement through automation is unreliable for rich text cases. The next step should be a focused editor test harness rather than relying only on manual browser checks.
+Browser automation for Lexical caret placement is brittle. Prefer the E2E bridge (`insertForkAtSelection`, `placeCursorInForkBranch`, `selectForkBranch`) and serialized Lexical state assertions over caret DOM assumptions.
 
-Recommended first tests:
+Recommended tests (see `tests/editor.spec.ts` and `tests/unit/selectedPathPlainText.test.ts`):
 
 - Load the seeded example story and assert it produces many paragraph nodes, not one giant paragraph.
 - Insert SceneBeat below normal text and assert a trailing paragraph exists.
+- Insert Story Fork; assert two branches and visible fork chrome.
+- Insert SceneBeat while caret is inside a branch; assert it is nested under the branch, not a top-level sibling of the fork.
+- Switch branches; assert plain text / AI path excludes the inactive branch.
+- Insert a nested fork inside a branch.
 - Backspace in an empty paragraph after SceneBeat should remove the SceneBeat and leave a valid selection.
-- Backspace before/after SceneBeat with real text should preserve expected text behavior.
-- Press Enter in seeded story paragraphs and assert selection remains valid.
-
-## Next Work
-
-- Add automated editor regression tests around Lexical state transforms and keyboard commands.
-- Keep browser testing for final user-flow verification, but use tests for repeatable selection and document-shape cases.
-- Review unused dependencies now that the playground is gone. Good candidates to inspect: `@lexical/table`, `@lexical/markdown`, `@lexical/code`, `@lexical/yjs`, `yjs`, `katex`, `prismjs`, `prettier`, and `@excalidraw/excalidraw`.

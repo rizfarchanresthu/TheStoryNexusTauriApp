@@ -25,6 +25,7 @@ import {
 import { useAgenticGeneration, type AgenticGenerationContext, type AgenticGenerationCallbacks } from '@/features/agents/hooks/useAgenticGeneration';
 import { useParallelGeneration } from '@/features/agents/hooks/useParallelGeneration';
 import { povUsesCharacter } from '@/features/chapters/utils/pov';
+import { $collectSelectedPathTextBeforeNode } from '@/components/editor/mainLexicalEditor/nodes/fork/selectedPathText';
 import type {
     Prompt,
     PromptParserConfig,
@@ -33,7 +34,6 @@ import type {
 import type { SceneBeatInstanceStoreApi } from '../stores/useSceneBeatInstanceStore';
 import { captureProseGeneration } from '../services/proseGenerationMetadata';
 import { $createAcceptedProse } from '@/components/editor/mainLexicalEditor/nodes/GeneratedProseNode';
-import { $isInDisabledProse } from '@/components/editor/mainLexicalEditor/utils/activeProse';
 
 type SceneBeatSnapshotWriter = {
     setSceneBeatSnapshot: (snapshot: Record<string, unknown>) => void;
@@ -72,25 +72,12 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     const createPromptConfig = useCallback((prompt: Prompt): PromptParserConfig => {
         const s = store.getState();
 
-        // Read previous text from the editor
+        // Read previous text from the editor (selected fork path only)
         let previousText = '';
         editor.getEditorState().read(() => {
             const node = $getNodeByKey(s.nodeKey);
             if (node) {
-                const textNodes: string[] = [];
-                let currentNode = node.getPreviousSibling();
-                while (currentNode) {
-                    if (!$isInDisabledProse(currentNode) && 'getTextContent' in currentNode) {
-                        const isBlockNode = ['paragraph', 'heading', 'list-item', 'generated-prose'].includes(currentNode.getType());
-                        const nodeText = currentNode.getTextContent();
-                        if (nodeText.trim()) {
-                            textNodes.unshift(nodeText);
-                            if (isBlockNode) textNodes.unshift('\n');
-                        }
-                    }
-                    currentNode = currentNode.getPreviousSibling();
-                }
-                previousText = textNodes.join('');
+                previousText = $collectSelectedPathTextBeforeNode(node);
             }
         });
 
@@ -351,20 +338,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             editor.getEditorState().read(() => {
                 const node = $getNodeByKey(s.nodeKey);
                 if (node) {
-                    const textNodes: string[] = [];
-                    let currentNode = node.getPreviousSibling();
-                    while (currentNode) {
-                        if (!$isInDisabledProse(currentNode) && 'getTextContent' in currentNode) {
-                            const isBlockNode = ['paragraph', 'heading', 'list-item', 'generated-prose'].includes(currentNode.getType());
-                            const nodeText = currentNode.getTextContent();
-                            if (nodeText.trim()) {
-                                textNodes.unshift(nodeText);
-                                if (isBlockNode) textNodes.unshift('\n');
-                            }
-                        }
-                        currentNode = currentNode.getPreviousSibling();
-                    }
-                    previousText = textNodes.join('');
+                    previousText = $collectSelectedPathTextBeforeNode(node);
                 }
             });
 

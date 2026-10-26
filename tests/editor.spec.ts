@@ -8,12 +8,14 @@ type EditorSnapshot = {
   currentChapterId: string | null;
   paragraphCount: number;
   sceneBeatCount: number;
+  forkGroupCount: number;
   topLevelTypes: string[];
   plainText: string;
   selection: null | {
     isRange: boolean;
     isCollapsed: boolean;
   };
+  state?: unknown;
 };
 
 const EXAMPLE_STORY_ID = "example-story-iron-salt";
@@ -314,6 +316,33 @@ test.describe("main Lexical editor", () => {
     await expect(command).toHaveValue('Keep text entered before the first save finishes.');
   });
 
+  test("keeps Enter newlines inside the SceneBeat command field", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await page.keyboard.press("Alt+S");
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.sceneBeatCount === 1);
+
+    const before = await getEditorSnapshot(page);
+    const command = page.getByTestId("scene-beat-command");
+
+    // Reproduce the flaky path: chapter selection after the SceneBeat, then
+    // focus the command field so Lexical still has a RangeSelection.
+    await placeCursorAtTopLevelNode(page, 2, "start");
+    await command.click();
+    await command.fill("line one");
+    await command.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("line two");
+
+    await expect(command).toHaveValue("line one\nline two");
+
+    const after = await getEditorSnapshot(page);
+    expect(after.paragraphCount).toBe(before.paragraphCount);
+    expect(after.topLevelTypes.filter((type) => type === "paragraph").length).toBe(
+      before.topLevelTypes.filter((type) => type === "paragraph").length
+    );
+  });
+
+
   test("Backspace from an empty paragraph after a SceneBeat removes only the SceneBeat", async ({ page }) => {
     const before = await getEditorSnapshot(page);
 
@@ -363,6 +392,145 @@ test.describe("main Lexical editor", () => {
     await expect.poll(() => getPersistedChapterContent(page), {
       timeout: 8_000,
     }).toContain(marker.trim());
+  });
+
+  test("inserts a story fork with one branch and can add another", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+
+    const afterInsert = await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    expect(afterInsert.topLevelTypes).toContain("fork-group");
+    expect(afterInsert.topLevelTypes).toContain("paragraph");
+
+    const fork = findFirstFork(afterInsert);
+    expect(fork).toBeTruthy();
+    const branches = (fork?.children || []).filter((child) => child.type === "fork-branch");
+    expect(branches).toHaveLength(1);
+    await expect(page.getByTestId("fork-chrome").first()).toBeVisible();
+
+    await page.getByTestId("fork-add-branch").first().click();
+    const afterAdd = await waitForEditorSnapshot(page, (snapshot) => {
+      const nextFork = findFirstFork(snapshot);
+      const nextBranches = (nextFork?.children || []).filter((child) => child.type === "fork-branch");
+      return nextBranches.length === 2;
+    });
+    expect(
+      (findFirstFork(afterAdd)?.children || []).filter((child) => child.type === "fork-branch")
+    ).toHaveLength(2);
+  });
+
+  test("inserts a SceneBeat inside the active fork branch", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+
+    await placeCursorInForkBranch(page, 0);
+    await page.keyboard.press("Alt+S");
+
+    const after = await waitForEditorSnapshot(page, (snapshot) => snapshot.sceneBeatCount === 1);
+    expect(after.topLevelTypes.filter((type) => type === "scene-beat")).toHaveLength(0);
+
+    const fork = findFirstFork(after);
+    const activeBranch = findActiveBranch(fork);
+    const branchTypes = collectTypes(activeBranch?.children || []);
+    expect(branchTypes).toContain("scene-beat");
+  });
+
+  test("switches fork branches and keeps inactive path out of plain text", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    await page.getByTestId("fork-add-branch").first().click();
+    await waitForEditorSnapshot(page, (snapshot) => {
+      const fork = findFirstFork(snapshot);
+      return (fork?.children || []).filter((child) => child.type === "fork-branch").length === 2;
+    });
+
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.type("Active branch marker AAA");
+
+    await selectForkBranch(page, 0, 1);
+    await placeCursorInForkBranch(page, 0, 1);
+    await page.keyboard.type("Inactive branch marker BBB");
+
+    await selectForkBranch(page, 0, 0);
+    const activeSnapshot = await waitForEditorSnapshot(
+      page,
+      (snapshot) => snapshot.plainText.includes("Active branch marker AAA")
+    );
+    expect(activeSnapshot.plainText).toContain("Active branch marker AAA");
+    expect(activeSnapshot.plainText).not.toContain("Inactive branch marker BBB");
+
+    await selectForkBranch(page, 0, 1);
+    const otherSnapshot = await waitForEditorSnapshot(
+      page,
+      (snapshot) => snapshot.plainText.includes("Inactive branch marker BBB")
+    );
+    expect(otherSnapshot.plainText).toContain("Inactive branch marker BBB");
+    expect(otherSnapshot.plainText).not.toContain("Active branch marker AAA");
+  });
+
+  test("keeps sibling fork paths isolated across backspace and SceneBeat insert", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+    await page.getByTestId("fork-add-branch").first().click();
+    await waitForEditorSnapshot(page, (snapshot) => {
+      const fork = findFirstFork(snapshot);
+      return (fork?.children || []).filter((child) => child.type === "fork-branch").length === 2;
+    });
+
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.type("PathA-only");
+
+    await selectForkBranch(page, 0, 1);
+    await placeCursorInForkBranch(page, 0, 1);
+    await page.keyboard.type("PathB-only");
+
+    // Backspace at end of Path A must not swallow Path B.
+    await selectForkBranch(page, 0, 0);
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.press("End");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+
+    let snapshot = await getEditorSnapshot(page);
+    let fork = findFirstFork(snapshot);
+    expect((fork?.children || []).filter((child) => child.type === "fork-branch")).toHaveLength(2);
+    expect(collectSerializedText(findBranch(fork, 1)!)).toContain("PathB-only");
+
+    // After visiting Path B, SceneBeat inserted on Path A must stay on Path A.
+    await selectForkBranch(page, 0, 1);
+    await placeCursorInForkBranch(page, 0, 1);
+    await selectForkBranch(page, 0, 0);
+    await placeCursorInForkBranch(page, 0, 0);
+    await page.keyboard.press("Alt+S");
+
+    snapshot = await waitForEditorSnapshot(page, (next) => next.sceneBeatCount === 1);
+    fork = findFirstFork(snapshot);
+    const pathA = findBranch(fork, 0);
+    const pathB = findBranch(fork, 1);
+    expect(collectTypes(pathA?.children || [])).toContain("scene-beat");
+    expect(collectTypes(pathB?.children || [])).not.toContain("scene-beat");
+    expect((fork?.children || []).filter((child) => child.type === "fork-branch")).toHaveLength(2);
+  });
+
+  test("supports nested forks inside a branch", async ({ page }) => {
+    await placeCursorAtTopLevelNode(page, 0, "end");
+    await insertForkAtSelection(page);
+    await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 1);
+
+    await placeCursorInForkBranch(page, 0, 0);
+    await insertForkAtSelection(page);
+
+    const after = await waitForEditorSnapshot(page, (snapshot) => snapshot.forkGroupCount === 2);
+    const outer = findFirstFork(after);
+    const nested = (outer?.children || [])
+      .filter((child) => child.type === "fork-branch")
+      .flatMap((branch) => branch.children || [])
+      .find((child) => child.type === "fork-group");
+    expect(nested?.type).toBe("fork-group");
   });
 
   test("resolves chapter_content from the current chapter", async ({ page }) => {
@@ -567,6 +735,11 @@ async function placeCursorAtTopLevelNode(
   index: number,
   position: "start" | "end"
 ) {
+  // SceneBeat insert focuses its command textarea. Keyboard actions must hit
+  // the chapter ContentEditable, so refocus it after moving Lexical selection.
+  const visibleEditor = page.locator(`${CHAPTER_EDITOR}:visible`).first();
+  await visibleEditor.focus();
+
   await page.evaluate(
     ({ index, position }) => {
       const api = window.__STORY_NEXUS_E2E__;
@@ -577,6 +750,93 @@ async function placeCursorAtTopLevelNode(
     },
     { index, position }
   );
+
+  await expect.poll(() => getActiveElementInfo(page)).toMatchObject({
+    ariaLabel: "Chapter editor",
+  });
+}
+
+async function insertForkAtSelection(page: Page) {
+  await page.evaluate(() => {
+    const api = window.__STORY_NEXUS_E2E__;
+    if (!api) {
+      throw new Error("Story Nexus E2E API is not available.");
+    }
+    return api.insertForkAtSelection();
+  });
+}
+
+async function selectForkBranch(page: Page, forkIndex: number, branchIndex: number) {
+  await page.evaluate(
+    ({ forkIndex, branchIndex }) => {
+      const api = window.__STORY_NEXUS_E2E__;
+      if (!api) {
+        throw new Error("Story Nexus E2E API is not available.");
+      }
+      return api.selectForkBranch(forkIndex, branchIndex);
+    },
+    { forkIndex, branchIndex }
+  );
+}
+
+async function placeCursorInForkBranch(
+  page: Page,
+  forkIndex: number,
+  branchIndex?: number
+) {
+  await page.evaluate(
+    ({ forkIndex, branchIndex }) => {
+      const api = window.__STORY_NEXUS_E2E__;
+      if (!api) {
+        throw new Error("Story Nexus E2E API is not available.");
+      }
+      return api.placeCursorInForkBranch(forkIndex, branchIndex);
+    },
+    { forkIndex, branchIndex }
+  );
+}
+
+type SerializedLexicalNode = {
+  type?: string;
+  text?: string;
+  activeBranchKey?: string;
+  branchKey?: string;
+  active?: boolean;
+  children?: SerializedLexicalNode[];
+};
+
+function findFirstFork(snapshot: EditorSnapshot): SerializedLexicalNode | null {
+  const root = (snapshot.state as { root?: { children?: SerializedLexicalNode[] } })?.root;
+  return (root?.children || []).find((child) => child.type === "fork-group") || null;
+}
+
+function findActiveBranch(fork: SerializedLexicalNode | null): SerializedLexicalNode | null {
+  if (!fork) return null;
+  const branches = (fork.children || []).filter((child) => child.type === "fork-branch");
+  return (
+    branches.find((branch) => branch.branchKey === fork.activeBranchKey) ||
+    branches.find((branch) => branch.active) ||
+    branches[0] ||
+    null
+  );
+}
+
+function findBranch(
+  fork: SerializedLexicalNode | null,
+  index: number
+): SerializedLexicalNode | null {
+  if (!fork) return null;
+  const branches = (fork.children || []).filter((child) => child.type === "fork-branch");
+  return branches[index] || null;
+}
+
+function collectTypes(nodes: SerializedLexicalNode[]): string[] {
+  const types: string[] = [];
+  for (const node of nodes) {
+    if (node.type) types.push(node.type);
+    if (node.children) types.push(...collectTypes(node.children));
+  }
+  return types;
 }
 
 async function getPersistedChapterContent(page: Page): Promise<string | null> {

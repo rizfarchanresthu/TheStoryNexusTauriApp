@@ -36,7 +36,7 @@ describe("disabled prose", () => {
         expect(restored.getEditorState().toJSON().root.children[1]).toMatchObject({ disabled: true });
         expect(chapter.content).toContain("EXCLUDED_SENTINEL");
         expect(lexicalToPlainText(chapter.content)).toBe("Active opening.\nActive ending.");
-        expect(await useChapterStore.getState().getChapterPlainText(chapter.id)).toBe("Active opening.\n\nActive ending.");
+        expect(await useChapterStore.getState().getChapterPlainText(chapter.id)).toBe("Active opening.\nActive ending.");
         await db.prompts.put({ id: "disabled-prompt", name: "Summary test", createdAt: new Date(), promptType: "gen_summary", allowedModels: [], messages: [{ role: "user", content: "Summarize: {{chapter_content}}" }] });
         const parsed = await createPromptParser().parse({ storyId: chapter.storyId, chapterId: chapter.id, promptId: "disabled-prompt" });
         expect(parsed.error).toBeUndefined();

@@ -329,6 +329,43 @@
     box-shadow: var(--shadow-glow);
 }
 
+.fork-group-node {
+    box-sizing: border-box;
+    max-width: 100%;
+    margin: 0.75rem 0;
+    overflow: hidden;
+    border-style: solid;
+    border-width: 0 0 0 3px;
+    border-color: transparent transparent transparent hsl(var(--primary) / 0.45);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.fork-header-node {
+    max-width: 100%;
+}
+
+.fork-chrome-portal-host {
+    width: 100%;
+}
+
+.fork-chrome-track {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.fork-branch-node {
+    box-sizing: border-box;
+    max-width: 100%;
+    padding: 0 0.75rem 0.75rem;
+}
+
+.fork-branch-node[data-active="false"],
+.fork-branch-node[hidden] {
+    display: none !important;
+}
+
 @media (max-width: 640px) {
     .sn-main-editor-header {
         padding: 6px 10px;

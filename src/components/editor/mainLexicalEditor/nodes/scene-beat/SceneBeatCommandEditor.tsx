@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ChevronDown, ChevronUp, Mic } from "lucide-react";
+import { stopLexicalPropagation } from "lexical";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,34 @@ export function SceneBeatCommandEditor() {
     }
   }, [command, collapsed]);
 
+  // Mark nested key/input events so Lexical's root listeners skip them.
+  // Without this, Enter still bubbles into the chapter editor and inserts a
+  // paragraph under the SceneBeat (and preventDefault kills the textarea newline).
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea || collapsed) return;
+
+    const markHandled = (event: Event) => {
+      stopLexicalPropagation(event);
+    };
+
+    textarea.addEventListener("keydown", markHandled);
+    textarea.addEventListener("beforeinput", markHandled);
+    textarea.addEventListener("input", markHandled);
+    textarea.addEventListener("paste", markHandled);
+    textarea.addEventListener("cut", markHandled);
+    textarea.addEventListener("copy", markHandled);
+
+    return () => {
+      textarea.removeEventListener("keydown", markHandled);
+      textarea.removeEventListener("beforeinput", markHandled);
+      textarea.removeEventListener("input", markHandled);
+      textarea.removeEventListener("paste", markHandled);
+      textarea.removeEventListener("cut", markHandled);
+      textarea.removeEventListener("copy", markHandled);
+    };
+  }, [collapsed]);
+
   const handleUndo = () => {
     if (historyIndex <= 0) return;
     isUndoRedoAction.current = true;
@@ -88,20 +117,14 @@ export function SceneBeatCommandEditor() {
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.ctrlKey && event.key === "z" && !event.shiftKey) {
       event.preventDefault();
-      event.stopPropagation();
       handleUndo();
       return;
     }
 
     if ((event.ctrlKey && event.shiftKey && event.key === "z") || (event.ctrlKey && event.key === "y")) {
       event.preventDefault();
-      event.stopPropagation();
       handleRedo();
       return;
-    }
-
-    if (event.ctrlKey && event.key === "a") {
-      event.stopPropagation();
     }
   };
 

@@ -6,6 +6,8 @@ import {
     $applyNodeReplacement,
     $getNodeByKey,
     DecoratorNode,
+    SKIP_DOM_SELECTION_TAG,
+    SKIP_SELECTION_FOCUS_TAG,
 } from "lexical";
 
 import {
@@ -41,12 +43,23 @@ function SceneBeatComponent({
 
     const writeNodeSnapshot = useCallback(
         (snapshot: Partial<SceneBeatNodeSnapshot>) => {
-            editor.update(() => {
-                const node = $getNodeByKey(nodeKey);
-                if ($isSceneBeatNode(node)) {
-                    node.setSceneBeatSnapshot(snapshot);
+            // Snapshot sync must not steal focus from the command textarea
+            // (Enter/typing would otherwise land in the chapter body).
+            editor.update(
+                () => {
+                    const node = $getNodeByKey(nodeKey);
+                    if ($isSceneBeatNode(node)) {
+                        node.setSceneBeatSnapshot(snapshot);
+                    }
+                },
+                {
+                    tag: [
+                        SCENE_BEAT_SNAPSHOT_TAG,
+                        SKIP_DOM_SELECTION_TAG,
+                        SKIP_SELECTION_FOCUS_TAG,
+                    ],
                 }
-            }, { tag: SCENE_BEAT_SNAPSHOT_TAG });
+            );
         },
         [editor, nodeKey]
     );

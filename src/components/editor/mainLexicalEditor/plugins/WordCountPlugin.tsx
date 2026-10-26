@@ -13,17 +13,13 @@ export function WordCountPlugin({ onChange }: WordCountPluginProps) {
 
     useEffect(() => {
         const updateWordCount = () => {
-            editor.getEditorState().read(() => {
-                onChange(countWordsInText(lexicalToPlainText(editor.getEditorState().toJSON())));
-            });
+            onChange(countWordsInText(lexicalToPlainText(editor.getEditorState().toJSON())));
         };
 
         updateWordCount();
 
         return editor.registerUpdateListener(({ editorState }) => {
-            editorState.read(() => {
-                onChange(countWordsInText(lexicalToPlainText(editorState.toJSON())));
-            });
+            onChange(countWordsInText(lexicalToPlainText(editorState.toJSON())));
         });
     }, [editor, onChange]);
 

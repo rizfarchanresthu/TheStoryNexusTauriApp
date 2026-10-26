@@ -11,6 +11,7 @@ import {
 import { useChapterStore } from '@/features/chapters/stores/useChapterStore';
 import { useLorebookStore } from '@/features/lorebook/stores/useLorebookStore';
 import { povUsesCharacter } from '@/features/chapters/utils/pov';
+import { formatChapterOutlineContext } from '@/features/brainstorm/utils/formatChapterOutlineContext';
 import { validatePromptMessages } from '../utils/promptValidation';
 
 export class PromptParser {
@@ -730,9 +731,14 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
                 result += `Story Chapter Summaries:\n${chapterSummary}\n\n`;
             }
 
+            const outlineText = await this.resolveSelectedChapterOutlines(context.storyId, undefined, true);
+            if (outlineText) {
+                result += `${outlineText}\n\n`;
+            }
+
             // Add lorebook entries if available
             if (entries.length > 0) {
-                if (chapterSummary) {
+                if (chapterSummary || outlineText) {
                     result += "Story World Information:\n";
                 }
                 result += this.formatLorebookEntries(entries);
@@ -768,7 +774,12 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
         }
 
         // Format the entries and combine with chapter summaries
-        if (entries.length === 0 && !chapterSummary && !context.additionalContext?.selectedChapterContent?.length) {
+        if (
+            entries.length === 0 &&
+            !chapterSummary &&
+            !context.additionalContext?.selectedChapterContent?.length &&
+            !context.additionalContext?.selectedOutlines?.length
+        ) {
             return "No story context is available for this query. Feel free to ask about anything related to writing or storytelling in general.";
         }
 
@@ -828,6 +839,14 @@ ${metadata?.relationships?.length ? '\nRelationships:\n' +
             }
         } else {
             console.log('DEBUG: No selectedChapterContent found or empty array');
+        }
+
+        const outlineText = await this.resolveSelectedChapterOutlines(
+            context.storyId,
+            context.additionalContext?.selectedOutlines as string[] | undefined
+        );
+        if (outlineText) {
+            result += `${outlineText}\n\n`;
         }
 
         // Handle lorebook entries
@@ -1028,6 +1047,28 @@ ${timeLine}${locationLine}${participantLine}Summary: ${event.summary}`;
 
         // Use the standard formatLorebookEntries method for consistency
         return this.formatLorebookEntries(sortedEntries);
+    }
+
+    private async resolveSelectedChapterOutlines(
+        storyId: string,
+        selectedOutlines?: string[],
+        includeAll = false
+    ): Promise<string> {
+        const chapters = await this.database.chapters
+            .where('storyId')
+            .equals(storyId)
+            .sortBy('order');
+
+        if (includeAll || selectedOutlines?.includes('all')) {
+            return formatChapterOutlineContext(chapters);
+        }
+
+        if (!selectedOutlines?.length) return '';
+
+        const selected = new Set(selectedOutlines);
+        return formatChapterOutlineContext(
+            chapters.filter((chapter) => selected.has(chapter.id))
+        );
     }
 
     private async resolveChapterOutline(context: PromptContext): Promise<string> {

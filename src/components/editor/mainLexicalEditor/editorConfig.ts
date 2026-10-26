@@ -7,6 +7,9 @@ import { SceneBeatNode } from "./nodes/SceneBeatNode";
 import { AssetImageNode } from "./nodes/AssetImageNode";
 import { ImageGenerationNode } from "./nodes/ImageGenerationNode";
 import { GeneratedProseNode } from "./nodes/GeneratedProseNode";
+import { ForkBranchNode } from "./nodes/fork/ForkBranchNode";
+import { ForkGroupNode } from "./nodes/fork/ForkGroupNode";
+import { ForkHeaderNode } from "./nodes/fork/ForkHeaderNode";
 import "./styles.css";
 
 const theme: EditorThemeClasses = {
@@ -49,6 +52,9 @@ export const mainLexicalEditorNodes: Array<Klass<LexicalNode>> = [
     AssetImageNode,
     ImageGenerationNode,
     GeneratedProseNode,
+    ForkGroupNode,
+    ForkBranchNode,
+    ForkHeaderNode,
 ];
 
 export const mainLexicalEditorConfig = {

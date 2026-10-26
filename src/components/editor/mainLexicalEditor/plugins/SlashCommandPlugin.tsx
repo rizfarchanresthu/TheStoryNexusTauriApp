@@ -23,10 +23,12 @@ import {
     KEY_ESCAPE_COMMAND,
     type LexicalEditor,
 } from "lexical";
-import { Bot, ImageIcon } from "lucide-react";
+import { Bot, GitBranch, ImageIcon } from "lucide-react";
 
 import { $insertSceneBeatBelowSelection, focusInsertedSceneBeat } from "../nodes/scene-beat/insertSceneBeat";
 import { $createImageGenerationNode } from "../nodes/ImageGenerationNode";
+import { $insertNodesAfterSelectionAnchor } from "../nodes/fork/getBlockInsertAnchor";
+import { $insertForkBelowSelection } from "../nodes/fork/insertFork";
 
 /* ─── command definitions ─────────────────────────────────── */
 
@@ -93,19 +95,28 @@ const SLASH_COMMANDS: SlashCommandItem[] = [
         },
     },
     {
+        key: "fork",
+        name: "Story Fork",
+        icon: <GitBranch className="h-4 w-4" />,
+        description: "Insert a branching story fork",
+        onSelect: (editor: LexicalEditor) => {
+            editor.update(() => {
+                removeSlashCommandText();
+                $insertForkBelowSelection();
+            });
+        },
+    },
+    {
         key: "image-generation",
         name: "Image",
         icon: <ImageIcon className="h-4 w-4" />,
         description: "Insert an image generation block",
         onSelect: (editor: LexicalEditor) => {
             editor.update(() => {
-                const selection = $getSelection();
-                if ($isRangeSelection(selection)) {
-                    removeSlashCommandText();
-                    const imageGenNode = $createImageGenerationNode();
-                    const paragraphNode = $createParagraphNode();
-                    selection.insertNodes([imageGenNode, paragraphNode]);
-                }
+                removeSlashCommandText();
+                const imageGenNode = $createImageGenerationNode();
+                const paragraphNode = $createParagraphNode();
+                $insertNodesAfterSelectionAnchor(imageGenNode, paragraphNode);
             });
         },
     },

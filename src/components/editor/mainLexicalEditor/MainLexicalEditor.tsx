@@ -20,6 +20,8 @@ import { FloatingToolbarPlugin } from "./floatingToolbar/FloatingToolbarPlugin";
 import { AssetImageInsertPlugin } from "./plugins/AssetImageInsertPlugin";
 import { ChapterContentPlugin } from "./plugins/ChapterContentPlugin";
 import { LorebookHighlightPlugin } from "./plugins/LorebookHighlightPlugin";
+import { ForkChromePlugin } from "./nodes/fork/ForkChromePlugin";
+import { ForkSelectionGuardPlugin } from "./plugins/ForkSelectionGuardPlugin";
 import { SceneBeatShortcutPlugin } from "./plugins/SceneBeatShortcutPlugin";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 import { EditorE2EBridge } from "./testing/EditorE2EBridge";
@@ -103,6 +105,8 @@ export function MainLexicalEditor({ maximizeButton }: MainLexicalEditorProps) {
                     <GeneratedProsePlugin />
                     <ListPlugin />
                     <SceneBeatShortcutPlugin />
+                    <ForkChromePlugin />
+                    <ForkSelectionGuardPlugin />
                     <AssetImageInsertPlugin />
                     <LorebookHighlightPlugin />
                     <SlashCommandPlugin />

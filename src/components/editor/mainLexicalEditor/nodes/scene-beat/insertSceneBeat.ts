@@ -1,11 +1,9 @@
 import {
     $createParagraphNode,
-    $getRoot,
-    $getSelection,
-    $isRangeSelection,
 } from "lexical";
 
 import { $createSceneBeatNode } from "../SceneBeatNode";
+import { $insertNodesAfterSelectionAnchor } from "../fork/getBlockInsertAnchor";
 
 const SCENE_BEAT_NODE_KEY_ATTR = "data-scene-beat-node-key";
 
@@ -38,24 +36,7 @@ function focusSceneBeatCommandInput(nodeKey: string): void {
 export function $insertSceneBeatBelowSelection(): string {
     const beatNode = $createSceneBeatNode();
     const paragraphNode = $createParagraphNode();
-    const selection = $getSelection();
-
-    if ($isRangeSelection(selection)) {
-        const cursorNode = selection.focus.getNode();
-        const insertionBlock = cursorNode.getKey() === "root"
-            ? null
-            : cursorNode.getTopLevelElementOrThrow();
-
-        if (insertionBlock) {
-            insertionBlock.insertAfter(beatNode);
-            beatNode.insertAfter(paragraphNode);
-        } else {
-            $getRoot().append(beatNode, paragraphNode);
-        }
-    } else {
-        $getRoot().append(beatNode, paragraphNode);
-    }
-
+    $insertNodesAfterSelectionAnchor(beatNode, paragraphNode);
     return beatNode.getKey();
 }
 
