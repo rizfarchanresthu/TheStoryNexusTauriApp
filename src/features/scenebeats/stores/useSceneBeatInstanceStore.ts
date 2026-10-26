@@ -16,6 +16,7 @@ import type {
     PipelinePreset,
     AgentResult,
     PovType,
+    ProseGenerationMetadata,
 } from '@/types/story';
 import { useLorebookStore } from '@/features/lorebook/stores/useLorebookStore';
 import { povUsesCharacter } from '@/features/chapters/utils/pov';
@@ -50,11 +51,14 @@ export interface SceneBeatInstanceState {
     // Prompt selection
     selectedPrompt: Prompt | undefined;
     selectedModel: AllowedModel | undefined;
+    universalSystemPromptId: string | undefined;
 
     // Generation
     streaming: boolean;
     streamedText: string;
     streamComplete: boolean;
+    generationMetadata?: ProseGenerationMetadata;
+    parallelGenerationMetadata?: ProseGenerationMetadata;
 
     // Regeneration
     lastGenerationMessages: PromptMessage[] | undefined;
@@ -142,6 +146,7 @@ export function createSceneBeatInstanceStore(nodeKey: string) {
         // Prompt
         selectedPrompt: undefined,
         selectedModel: undefined,
+        universalSystemPromptId: undefined,
 
         // Generation
         streaming: false,
@@ -238,6 +243,7 @@ export function createSceneBeatInstanceStore(nodeKey: string) {
 
         resetGeneration: () => {
             set({
+                generationMetadata: undefined,
                 streamedText: '',
                 streamComplete: false,
                 streaming: false,

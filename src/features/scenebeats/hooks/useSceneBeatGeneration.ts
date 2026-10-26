@@ -9,7 +9,6 @@ import { useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext.js';
 import {
     $createParagraphNode,
-    $createTextNode,
     $getNodeByKey,
 } from 'lexical';
 import { toast } from 'react-toastify';
@@ -32,6 +31,9 @@ import type {
     AllowedModel,
 } from '@/types/story';
 import type { SceneBeatInstanceStoreApi } from '../stores/useSceneBeatInstanceStore';
+import { captureProseGeneration } from '../services/proseGenerationMetadata';
+import { $createAcceptedProse } from '@/components/editor/mainLexicalEditor/nodes/GeneratedProseNode';
+import { $isInDisabledProse } from '@/components/editor/mainLexicalEditor/utils/activeProse';
 
 type SceneBeatSnapshotWriter = {
     setSceneBeatSnapshot: (snapshot: Record<string, unknown>) => void;
@@ -78,8 +80,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 const textNodes: string[] = [];
                 let currentNode = node.getPreviousSibling();
                 while (currentNode) {
-                    if ('getTextContent' in currentNode) {
-                        const isBlockNode = ['paragraph', 'heading', 'list-item'].includes(currentNode.getType());
+                    if (!$isInDisabledProse(currentNode) && 'getTextContent' in currentNode) {
+                        const isBlockNode = ['paragraph', 'heading', 'list-item', 'generated-prose'].includes(currentNode.getType());
                         const nodeText = currentNode.getTextContent();
                         if (nodeText.trim()) {
                             textNodes.unshift(nodeText);
@@ -115,6 +117,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
 
         return {
             promptId: prompt.id,
+            universalSystemPromptId: s.universalSystemPromptId,
             storyId,
             chapterId,
             scenebeat: s.command.trim(),
@@ -170,7 +173,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     // ── Standard generation ────────────────────────────────────
 
     const handleGenerateWithPrompt = useCallback(async () => {
-        const { selectedPrompt, selectedModel, sceneBeatId } = store.getState();
+        const source = store.getState();
+        const { selectedPrompt, selectedModel, sceneBeatId } = source;
         if (!selectedPrompt) {
             toast.error('Please select a prompt first');
             return;
@@ -192,7 +196,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             const response = await generateWithParsedMessages(
                 parsedPrompt.messages,
                 selectedModel!,
-                selectedPrompt.id
+                selectedPrompt.id,
+                (model, prompt) => store.setState({ generationMetadata: captureProseGeneration(source, prompt, parsedPrompt.messages, model, 'standard') })
             );
 
             if (!response.ok && response.status !== 204) throw new Error('Failed to generate response');
@@ -211,7 +216,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                         streamComplete: true,
                         lastGenerationResponse: responseText,
                     });
-                    updateNodeSnapshot({ generatedContent: responseText, accepted: false });
+                    updateNodeSnapshot({ generatedContent: responseText, accepted: false, generationMetadata: store.getState().generationMetadata });
                 },
                 (error) => {
                     console.error('Error streaming response:', error);
@@ -225,6 +230,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 try {
                     await sceneBeatService.updateSceneBeat(finalSceneBeatId, {
                         generatedContent: store.getState().streamedText,
+                        generationMetadata: store.getState().generationMetadata,
                         accepted: false,
                     });
                 } catch (error) {
@@ -233,7 +239,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             }
         } catch (error) {
             console.error('Error generating text:', error);
-            toast.error('Failed to generate text');
+            toast.error(error instanceof Error ? error.message : 'Failed to generate text');
         } finally {
             store.setState({ streaming: false });
         }
@@ -242,7 +248,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     // ── Regeneration ───────────────────────────────────────────
 
     const handleRegenerate = useCallback(async (customMessage: string) => {
-        const { lastGenerationMessages, lastGenerationResponse, selectedModel, selectedPrompt, sceneBeatId } = store.getState();
+        const source = store.getState();
+        const { lastGenerationMessages, lastGenerationResponse, selectedModel, selectedPrompt, sceneBeatId } = source;
         if (!lastGenerationMessages || !lastGenerationResponse) {
             toast.error('No previous generation to regenerate from');
             return;
@@ -269,7 +276,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
             const response = await generateWithParsedMessages(
                 regenMessages,
                 selectedModel,
-                selectedPrompt.id
+                selectedPrompt.id,
+                (model, prompt) => store.setState({ generationMetadata: captureProseGeneration(source, prompt, regenMessages, model, 'regeneration') })
             );
 
             if (!response.ok && response.status !== 204) throw new Error('Failed to regenerate response');
@@ -287,7 +295,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                         streamComplete: true,
                         lastGenerationResponse: responseText,
                     });
-                    updateNodeSnapshot({ generatedContent: responseText, accepted: false });
+                    updateNodeSnapshot({ generatedContent: responseText, accepted: false, generationMetadata: store.getState().generationMetadata });
                 },
                 (error) => {
                     console.error('Error streaming regenerated response:', error);
@@ -300,6 +308,7 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                 try {
                     await sceneBeatService.updateSceneBeat(sceneBeatId, {
                         generatedContent: store.getState().streamedText,
+                        generationMetadata: store.getState().generationMetadata,
                         accepted: false,
                     });
                 } catch (error) {
@@ -345,8 +354,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                     const textNodes: string[] = [];
                     let currentNode = node.getPreviousSibling();
                     while (currentNode) {
-                        if ('getTextContent' in currentNode) {
-                            const isBlockNode = ['paragraph', 'heading', 'list-item'].includes(currentNode.getType());
+                        if (!$isInDisabledProse(currentNode) && 'getTextContent' in currentNode) {
+                            const isBlockNode = ['paragraph', 'heading', 'list-item', 'generated-prose'].includes(currentNode.getType());
                             const nodeText = currentNode.getTextContent();
                             if (nodeText.trim()) {
                                 textNodes.unshift(nodeText);
@@ -397,19 +406,27 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
                         pipelineResult.proseOutput ||
                         pipelineResult.finalOutput ||
                         store.getState().streamedText;
+                    const source = [...pipelineResult.steps].reverse().find((step) => step.output === output);
+                    const generationMetadata = captureProseGeneration(s, {
+                        id: source?.agentPresetId || s.selectedPipeline!.id,
+                        name: `${s.selectedPipeline!.name} · ${source?.agentName || 'Pipeline'}`,
+                    }, source?.promptSent || [], source?.model, 'pipeline');
                     store.setState({
                         streamedText: output,
+                        generationMetadata,
                         streamComplete: true,
                         showAgenticProgress: false,
                     });
                     updateNodeSnapshot({
                         generatedContent: output,
+                        generationMetadata,
                         accepted: false,
                     });
 
                     if (s.sceneBeatId) {
                         sceneBeatService.updateSceneBeat(s.sceneBeatId, {
                             generatedContent: output,
+                            generationMetadata,
                             accepted: false,
                         }).catch((err: unknown) => console.error('Error saving agentic content:', err));
                     }
@@ -439,7 +456,8 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     // ── Parallel generation ────────────────────────────────────
 
     const handleParallelGenerate = useCallback(async () => {
-        const { selectedPrompt } = store.getState();
+        const source = store.getState();
+        const { selectedPrompt } = source;
         if (!selectedPrompt) {
             toast.error('Please select a prompt first');
             return;
@@ -450,9 +468,11 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
         }
         try {
             parallelHook.resetResponses();
-            store.setState({ showParallelDrawer: true });
+            store.setState({ showParallelDrawer: true, parallelGenerationMetadata: undefined });
             const config = createPromptConfig(selectedPrompt);
-            await parallelHook.generateParallel(config, selectedPrompt.parallelModels);
+            await parallelHook.generateParallel(config, selectedPrompt.parallelModels, (messages, prompt) => {
+                store.setState({ parallelGenerationMetadata: captureProseGeneration(source, prompt, messages, undefined, 'parallel') });
+            });
         } catch (error) {
             console.error('Error in parallel generation:', error);
             toast.error('Failed to run parallel generation');
@@ -462,10 +482,14 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     const handleParallelAccept = useCallback((text: string, model: AllowedModel) => {
         const { nodeKey } = store.getState();
         editor.update(() => {
-            const paragraphNode = $createParagraphNode();
-            paragraphNode.append($createTextNode(text));
+            const snapshot = store.getState().parallelGenerationMetadata;
+            const paragraphNode = $createAcceptedProse(text, snapshot ? { ...snapshot, id: crypto.randomUUID(), model: { ...model } } : undefined);
             const currentNode = $getNodeByKey(nodeKey);
-            if (currentNode) currentNode.insertAfter(paragraphNode);
+            if (currentNode) {
+                const gap = $createParagraphNode();
+                currentNode.insertAfter(gap);
+                gap.insertAfter(paragraphNode);
+            }
         });
         store.setState({ showParallelDrawer: false });
         parallelHook.resetResponses();
@@ -475,12 +499,15 @@ export function useSceneBeatGeneration(store: SceneBeatInstanceStoreApi) {
     // ── Accept / Reject ────────────────────────────────────────
 
     const handleAccept = useCallback(async () => {
-        const { streamedText, sceneBeatId, nodeKey } = store.getState();
+        const { streamedText, sceneBeatId, nodeKey, generationMetadata } = store.getState();
         editor.update(() => {
-            const paragraphNode = $createParagraphNode();
-            paragraphNode.append($createTextNode(streamedText));
+            const paragraphNode = $createAcceptedProse(streamedText, generationMetadata);
             const currentNode = $getNodeByKey(nodeKey);
-            if (currentNode) currentNode.insertAfter(paragraphNode);
+            if (currentNode) {
+                const gap = $createParagraphNode();
+                currentNode.insertAfter(gap);
+                gap.insertAfter(paragraphNode);
+            }
         });
 
         if (sceneBeatId) {
