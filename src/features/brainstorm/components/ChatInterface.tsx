@@ -71,6 +71,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import useTemplateStore from '@/features/templates/store/templateStore';
 import CreateTemplateDialog from '@/features/templates/components/CreateTemplateDialog';
 import TemplateManagerDialog from '@/features/templates/components/TemplateManagerDialog';
@@ -580,16 +586,19 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
 
   const handleOutlineSelect = (chapterId: string) => {
     if (chapterId === "all") {
-      setSelectedOutlines(["all"]);
+      setSelectedOutlines(selectedOutlines.includes("all") ? [] : ["all"]);
       return;
     }
 
-    if (!selectedOutlines.includes(chapterId)) {
-      setSelectedOutlines([
-        ...selectedOutlines.filter((id) => id !== "all"),
-        chapterId,
-      ]);
+    if (selectedOutlines.includes(chapterId)) {
+      setSelectedOutlines(selectedOutlines.filter((id) => id !== chapterId));
+      return;
     }
+
+    setSelectedOutlines([
+      ...selectedOutlines.filter((id) => id !== "all"),
+      chapterId,
+    ]);
   };
 
   const removeOutline = (chapterId: string) => {
@@ -1769,48 +1778,44 @@ export default function ChatInterface({ storyId, currentChapterId, onConfigurePr
                   <div className="text-sm font-medium mb-1">
                     Chapter Outlines
                   </div>
-                  <Select
-                    onValueChange={(value) => {
-                      handleOutlineSelect(value);
-                      const selectElement = document.querySelector(
-                        '[data-chapter-outline-select="true"]'
-                      );
-                      if (selectElement) {
-                        (selectElement as HTMLSelectElement).value = "";
-                      }
-                    }}
-                    disabled={includeFullContext}
-                    value=""
-                  >
-                    <SelectTrigger
-                      className="w-full"
-                      data-chapter-outline-select="true"
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={includeFullContext}
+                        data-chapter-outline-select="true"
+                        className="h-9 w-full justify-between px-3 font-normal text-muted-foreground shadow-sm hover:text-muted-foreground"
+                      >
+                        <span className="truncate">Select chapter outline</span>
+                        <ChevronDown className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="max-h-64 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
                     >
-                      <SelectValue placeholder="Select chapter outline" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        value="all"
-                        disabled={selectedOutlines.includes("all")}
+                      <DropdownMenuCheckboxItem
+                        checked={selectedOutlines.includes("all")}
+                        onCheckedChange={() => handleOutlineSelect("all")}
+                        onSelect={(event) => event.preventDefault()}
                       >
                         All Outlines
-                      </SelectItem>
+                      </DropdownMenuCheckboxItem>
                       {chapters
                         .filter((chapter) => chapter.outline?.content?.trim())
                         .map((chapter) => (
-                          <SelectItem
+                          <DropdownMenuCheckboxItem
                             key={chapter.id}
-                            value={chapter.id}
-                            disabled={
-                              selectedOutlines.includes(chapter.id) ||
-                              selectedOutlines.includes("all")
-                            }
+                            checked={selectedOutlines.includes(chapter.id)}
+                            onCheckedChange={() => handleOutlineSelect(chapter.id)}
+                            onSelect={(event) => event.preventDefault()}
                           >
                             Chapter {chapter.order}: {chapter.title}
-                          </SelectItem>
+                          </DropdownMenuCheckboxItem>
                         ))}
-                    </SelectContent>
-                  </Select>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 {/* Lorebook items multi-select */}
